@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: tally
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.tally: DEBUG
