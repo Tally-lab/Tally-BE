@@ -18,9 +18,9 @@ public class UserRepositoryImpl implements UserRepository {
     @Override
     public User save(User user) {
         try {
-            String fileName = FILE_PREFIX + user.getPhoneNumber() + FILE_SUFFIX;
+            String fileName = FILE_PREFIX + user.getGithubLogin() + FILE_SUFFIX;
             JsonFileUtil.writeToFile(fileName, user);
-            log.info("User saved: {}", user.getPhoneNumber());
+            log.info("User saved: {}", user.getGithubLogin());
             return user;
         } catch (IOException e) {
             log.error("Failed to save user", e);
@@ -30,18 +30,22 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     public Optional<User> findById(String id) {
-        // ID로 찾기는 전화번호로 찾는 것과 동일하게 처리
-        return findByPhoneNumber(id);
+        return findByGithubLogin(id);
     }
 
     @Override
     public Optional<User> findByPhoneNumber(String phoneNumber) {
+        // GitHub 전환 후 사용 안 함
+        return Optional.empty();
+    }
+
+    public Optional<User> findByGithubLogin(String githubLogin) {
         try {
-            String fileName = FILE_PREFIX + phoneNumber + FILE_SUFFIX;
+            String fileName = FILE_PREFIX + githubLogin + FILE_SUFFIX;
             User user = JsonFileUtil.readFromFile(fileName, User.class);
             return Optional.ofNullable(user);
         } catch (IOException e) {
-            log.error("Failed to find user by phone number: {}", phoneNumber, e);
+            log.error("Failed to find user by github login: {}", githubLogin, e);
             return Optional.empty();
         }
     }
