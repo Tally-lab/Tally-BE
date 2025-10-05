@@ -1,7 +1,7 @@
 package com.tally.controller;
 
-import com.tally.domain.AnalysisResult;
-import com.tally.service.AnalysisService;
+import com.tally.domain.ContributionStats;
+import com.tally.service.ContributionAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -15,26 +15,31 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AnalysisController {
 
-    private final AnalysisService analysisService;
+    private final ContributionAnalysisService analysisService;
 
     @PostMapping("/analyze")
-    public ResponseEntity<AnalysisResult> analyzeData(@RequestBody Map<String, String> request) {
-        String csvDataId = request.get("csvDataId");
-        log.info("Analysis request for CSV data: {}", csvDataId);
+    public ResponseEntity<ContributionStats> analyzeContribution(
+            @RequestBody Map<String, String> request,
+            @RequestHeader("Authorization") String authorization) {
 
-        AnalysisResult result = analysisService.analyzeData(csvDataId);
-        return ResponseEntity.ok(result);
+        String userId = request.get("userId");
+        String owner = request.get("owner");
+        String repo = request.get("repo");
+        String userLogin = request.get("userLogin");
+        String accessToken = authorization.replace("Bearer ", "");
+
+        log.info("Analyzing contribution for user {} in {}/{}", userLogin, owner, repo);
+
+        ContributionStats stats = analysisService.analyzeContribution(
+                userId, accessToken, owner, repo, userLogin
+        );
+
+        return ResponseEntity.ok(stats);
     }
 
-    @GetMapping("/result/{resultId}")
-    public ResponseEntity<AnalysisResult> getAnalysisResult(@PathVariable String resultId) {
-        AnalysisResult result = analysisService.getAnalysisResult(resultId);
-        return ResponseEntity.ok(result);
-    }
-
-    @GetMapping("/result/csv/{csvDataId}")
-    public ResponseEntity<AnalysisResult> getAnalysisResultByCSVDataId(@PathVariable String csvDataId) {
-        AnalysisResult result = analysisService.getAnalysisResultByCSVDataId(csvDataId);
-        return ResponseEntity.ok(result);
+    @GetMapping("/stats/{statsId}")
+    public ResponseEntity<ContributionStats> getStats(@PathVariable String statsId) {
+        ContributionStats stats = analysisService.getStats(statsId);
+        return ResponseEntity.ok(stats);
     }
 }

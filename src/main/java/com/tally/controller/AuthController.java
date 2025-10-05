@@ -17,18 +17,22 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @PostMapping("/login")
-    public ResponseEntity<User> login(@RequestBody Map<String, String> request) {
-        String phoneNumber = request.get("phoneNumber");
-        log.info("Login request for phone number: {}", phoneNumber);
+    @PostMapping("/github")
+    public ResponseEntity<User> loginWithGitHub(@RequestBody Map<String, String> request) {
+        String githubLogin = request.get("githubLogin");
+        String githubId = request.get("githubId");
+        String accessToken = request.get("accessToken");
+        String avatarUrl = request.get("avatarUrl");
 
-        User user = authService.login(phoneNumber);
+        log.info("GitHub login request for user: {}", githubLogin);
+
+        User user = authService.loginWithGitHub(githubLogin, githubId, accessToken, avatarUrl);
         return ResponseEntity.ok(user);
     }
 
-    @GetMapping("/user/{phoneNumber}")
-    public ResponseEntity<User> getUser(@PathVariable String phoneNumber) {
-        User user = authService.getUserByPhoneNumber(phoneNumber);
+    @GetMapping("/user/{githubLogin}")
+    public ResponseEntity<User> getUser(@PathVariable String githubLogin) {
+        User user = authService.getUserByGithubLogin(githubLogin);
         return ResponseEntity.ok(user);
     }
 }
