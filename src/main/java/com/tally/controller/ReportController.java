@@ -9,6 +9,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @Slf4j
 @RestController
 @RequestMapping("/reports")
@@ -17,11 +19,19 @@ public class ReportController {
 
     private final ReportGenerationService reportService;
 
-    @PostMapping("/markdown/{statsId}")
-    public ResponseEntity<String> generateMarkdownReport(@PathVariable String statsId) {
-        log.info("Generating Markdown report for stats: {}", statsId);
+    @PostMapping("/markdown")
+    public ResponseEntity<String> generateMarkdownReport(
+            @RequestBody Map<String, String> request,
+            @RequestHeader("Authorization") String authorization) {
 
-        Report report = reportService.generateMarkdownReport(statsId);
+        String owner = request.get("owner");
+        String repo = request.get("repo");
+        String username = request.get("username");
+        String accessToken = authorization.replace("Bearer ", "");
+
+        log.info("Generating Markdown report for {}/{} - User: {}", owner, repo, username);
+
+        Report report = reportService.generateMarkdownReport(accessToken, owner, repo, username);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.TEXT_PLAIN);
@@ -32,11 +42,19 @@ public class ReportController {
                 .body(report.getContent());
     }
 
-    @PostMapping("/html/{statsId}")
-    public ResponseEntity<String> generateHtmlReport(@PathVariable String statsId) {
-        log.info("Generating HTML report for stats: {}", statsId);
+    @PostMapping("/html")
+    public ResponseEntity<String> generateHtmlReport(
+            @RequestBody Map<String, String> request,
+            @RequestHeader("Authorization") String authorization) {
 
-        Report report = reportService.generateHtmlReport(statsId);
+        String owner = request.get("owner");
+        String repo = request.get("repo");
+        String username = request.get("username");
+        String accessToken = authorization.replace("Bearer ", "");
+
+        log.info("Generating HTML report for {}/{} - User: {}", owner, repo, username);
+
+        Report report = reportService.generateHtmlReport(accessToken, owner, repo, username);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.TEXT_HTML);
