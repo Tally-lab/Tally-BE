@@ -41,3 +41,4 @@ out/
 
 ### Application ###
 application-local.yml
+data/

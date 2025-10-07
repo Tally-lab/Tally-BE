@@ -1,64 +1,54 @@
 package com.tally.repository;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.tally.domain.User;
 import com.tally.util.JsonFileUtil;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
-import java.io.IOException;
-import java.util.Optional;
+import java.util.*;
 
-@Slf4j
 @Repository
 public class UserRepositoryImpl implements UserRepository {
-
-    private static final String FILE_PREFIX = "user_";
-    private static final String FILE_SUFFIX = ".json";
+    private static final String FILE_PATH = "users.json";  // "data/" 제거!
 
     @Override
     public User save(User user) {
-        try {
-            String fileName = FILE_PREFIX + user.getGithubLogin() + FILE_SUFFIX;
-            JsonFileUtil.writeToFile(fileName, user);
-            log.info("User saved: {}", user.getGithubLogin());
-            return user;
-        } catch (IOException e) {
-            log.error("Failed to save user", e);
-            throw new RuntimeException("Failed to save user", e);
+        List<User> users = findAll();
+
+        if (user.getId() == null) {
+            user.setId(UUID.randomUUID().toString());
         }
+
+        users.removeIf(u -> u.getId().equals(user.getId()));
+        users.add(user);
+
+        JsonFileUtil.writeToFile(FILE_PATH, users);
+        return user;
     }
 
     @Override
     public Optional<User> findById(String id) {
-        return findByGithubLogin(id);
+        return findAll().stream()
+                .filter(user -> user.getId().equals(id))
+                .findFirst();
     }
 
     @Override
-    public Optional<User> findByPhoneNumber(String phoneNumber) {
-        // GitHub 전환 후 사용 안 함
-        return Optional.empty();
-    }
-
-    public Optional<User> findByGithubLogin(String githubLogin) {
-        try {
-            String fileName = FILE_PREFIX + githubLogin + FILE_SUFFIX;
-            User user = JsonFileUtil.readFromFile(fileName, User.class);
-            return Optional.ofNullable(user);
-        } catch (IOException e) {
-            log.error("Failed to find user by github login: {}", githubLogin, e);
-            return Optional.empty();
-        }
+    public Optional<User> findByAccessToken(String accessToken) {
+        return findAll().stream()
+                .filter(user -> accessToken.equals(user.getAccessToken()))
+                .findFirst();
     }
 
     @Override
-    public void delete(String id) {
-        try {
-            String fileName = FILE_PREFIX + id + FILE_SUFFIX;
-            JsonFileUtil.deleteFile(fileName);
-            log.info("User deleted: {}", id);
-        } catch (IOException e) {
-            log.error("Failed to delete user", e);
-            throw new RuntimeException("Failed to delete user", e);
-        }
+    public List<User> findAll() {
+        return JsonFileUtil.readFromFile(FILE_PATH, new TypeReference<List<User>>() {});
+    }
+
+    @Override
+    public void deleteById(String id) {
+        List<User> users = findAll();
+        users.removeIf(user -> user.getId().equals(id));
+        JsonFileUtil.writeToFile(FILE_PATH, users);
     }
 }
