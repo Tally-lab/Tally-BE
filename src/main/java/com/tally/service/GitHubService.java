@@ -72,6 +72,33 @@ public class GitHubService {
     }
 
     /**
+     * 커밋 상세 정보 조회 (파일 목록 포함)
+     */
+    public Commit getCommitDetail(String token, String owner, String repo, String sha) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "token " + token);
+        headers.set("Accept", "application/json");
+
+        HttpEntity<String> request = new HttpEntity<>(headers);
+
+        String url = String.format("https://api.github.com/repos/%s/%s/commits/%s", owner, repo, sha);
+
+        try {
+            ResponseEntity<Commit> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    request,
+                    Commit.class
+            );
+
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Failed to fetch commit detail for sha: {}", sha, e);
+            return null;
+        }
+    }
+
+    /**
      * 레포지토리의 Pull Request 목록 조회
      */
     public List<PullRequest> getRepositoryPullRequests(String token, String owner, String repo) {

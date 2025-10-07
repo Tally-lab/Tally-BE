@@ -4,11 +4,13 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 import java.util.Map;
 
 @Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -31,5 +33,19 @@ public class ContributionStats {
     private Map<Integer, Integer> hourlyActivity;       // 시간대별 커밋 수
     private Map<String, Integer> dailyActivity;         // 요일별 커밋 수
 
+    // 역할 분석
+    private Map<String, RoleStats> roleDistribution;    // 역할별 통계
+
     private LocalDateTime analyzedAt;
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class RoleStats {
+        private String roleName;
+        private int commitCount;
+        private double percentage;
+    }
 }
