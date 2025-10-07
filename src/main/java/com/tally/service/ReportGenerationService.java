@@ -8,7 +8,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,6 +41,27 @@ public class ReportGenerationService {
         markdown.append(String.format("- **총 커밋 수:** %d개\n", stats.getTotalCommits()));
         markdown.append(String.format("- **내 커밋 수:** %d개\n", stats.getUserCommits()));
         markdown.append(String.format("- **기여도:** %.1f%%\n\n", stats.getCommitPercentage()));
+
+        // 역할 분석 (NEW!)
+        if (stats.getRoleDistribution() != null && !stats.getRoleDistribution().isEmpty()) {
+            markdown.append("## 역할 분석\n\n");
+
+            // 비율 순으로 정렬
+            List<Map.Entry<String, ContributionStats.RoleStats>> sortedRoles =
+                    stats.getRoleDistribution().entrySet().stream()
+                            .sorted((a, b) -> Double.compare(b.getValue().getPercentage(), a.getValue().getPercentage()))
+                            .collect(Collectors.toList());
+
+            for (Map.Entry<String, ContributionStats.RoleStats> entry : sortedRoles) {
+                ContributionStats.RoleStats roleStats = entry.getValue();
+                markdown.append(generateProgressBar(roleStats.getPercentage()));
+                markdown.append(String.format(" **%s** %.1f%% (%d개)\n",
+                        roleStats.getRoleName(),
+                        roleStats.getPercentage(),
+                        roleStats.getCommitCount()));
+            }
+            markdown.append("\n");
+        }
 
         // 구현한 기능 (PR)
         markdown.append("## 구현한 기능\n\n");
@@ -101,6 +124,9 @@ public class ReportGenerationService {
         html.append("        h2 { color: #555; margin-top: 30px; }\n");
         html.append("        .stats { background: #e8f5e9; padding: 20px; border-radius: 5px; margin: 20px 0; }\n");
         html.append("        .stats p { margin: 10px 0; font-size: 18px; }\n");
+        html.append("        .role-item { margin: 10px 0; }\n");
+        html.append("        .role-bar { background: #e0e0e0; height: 30px; border-radius: 5px; overflow: hidden; margin: 5px 0; }\n");
+        html.append("        .role-fill { background: #4CAF50; height: 100%; display: flex; align-items: center; padding-left: 10px; color: white; font-weight: bold; }\n");
         html.append("        .list-item { padding: 10px; margin: 5px 0; background: #f9f9f9; border-left: 4px solid #4CAF50; }\n");
         html.append("        .footer { text-align: center; margin-top: 40px; color: #999; font-size: 14px; }\n");
         html.append("    </style>\n");
@@ -119,6 +145,29 @@ public class ReportGenerationService {
         html.append(String.format("            <p>내 커밋 수: <strong>%d개</strong></p>\n", stats.getUserCommits()));
         html.append(String.format("            <p>기여도: <strong>%.1f%%</strong></p>\n", stats.getCommitPercentage()));
         html.append("        </div>\n");
+
+        // 역할 분석 (NEW!)
+        if (stats.getRoleDistribution() != null && !stats.getRoleDistribution().isEmpty()) {
+            html.append("        <h2>역할 분석</h2>\n");
+
+            // 비율 순으로 정렬
+            List<Map.Entry<String, ContributionStats.RoleStats>> sortedRoles =
+                    stats.getRoleDistribution().entrySet().stream()
+                            .sorted((a, b) -> Double.compare(b.getValue().getPercentage(), a.getValue().getPercentage()))
+                            .collect(Collectors.toList());
+
+            for (Map.Entry<String, ContributionStats.RoleStats> entry : sortedRoles) {
+                ContributionStats.RoleStats roleStats = entry.getValue();
+                html.append("        <div class=\"role-item\">\n");
+                html.append(String.format("            <p><strong>%s</strong>: %.1f%% (%d개)</p>\n",
+                        roleStats.getRoleName(), roleStats.getPercentage(), roleStats.getCommitCount()));
+                html.append("            <div class=\"role-bar\">\n");
+                html.append(String.format("                <div class=\"role-fill\" style=\"width: %.1f%%\">%.1f%%</div>\n",
+                        roleStats.getPercentage(), roleStats.getPercentage()));
+                html.append("            </div>\n");
+                html.append("        </div>\n");
+            }
+        }
 
         html.append("        <h2>구현한 기능 (Pull Requests)</h2>\n");
         if (userPRs.isEmpty()) {
@@ -156,5 +205,23 @@ public class ReportGenerationService {
                 .content(html.toString())
                 .generatedAt(LocalDateTime.now())
                 .build();
+    }
+
+    /**
+     * 진행바 생성 (Markdown용)
+     */
+    private String generateProgressBar(double percentage) {
+        int filled = (int) Math.round(percentage / 10);
+        int empty = 10 - filled;
+
+        StringBuilder bar = new StringBuilder();
+        for (int i = 0; i < filled; i++) {
+            bar.append("■");
+        }
+        for (int i = 0; i < empty; i++) {
+            bar.append("□");
+        }
+
+        return bar.toString();
     }
 }
