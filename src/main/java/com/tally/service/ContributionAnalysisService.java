@@ -1,78 +1,81 @@
 package com.tally.service;
 
-import com.tally.domain.ContributionStats;
-import com.tally.repository.ContributionStatsRepository;
+import com.tally.domain.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ContributionAnalysisService {
-
-    private final ContributionStatsRepository contributionStatsRepository;
     private final GitHubService gitHubService;
 
-    public ContributionStats analyzeContribution(String userId, String accessToken, String owner, String repo, String userLogin) {
-        log.info("Analyzing contribution for user {} in repo {}/{}", userLogin, owner, repo);
+    /**
+     * 레포지토리 기여도 분석
+     */
+    public ContributionStats analyzeContribution(String token, String owner, String repo, String username) {
+        // 1. 커밋 데이터 수집
+        List<Commit> commits = gitHubService.getRepositoryCommits(token, owner, repo);
 
-        // GitHub에서 커밋 데이터 가져오기
-        Map<String, Object> repoData = gitHubService.getRepositoryCommits(accessToken, owner, repo);
-        List<Map<String, Object>> commits = (List<Map<String, Object>>) repoData.get("commits");
+        // 2. PR 데이터 수집
+        List<PullRequest> pullRequests = gitHubService.getRepositoryPullRequests(token, owner, repo);
 
-        // 사용자 커밋 분석
-        int totalCommits = commits.size();
-        int userCommits = 0;
-        int additions = 0;
-        int deletions = 0;
-        Map<Integer, Integer> hourlyActivity = new HashMap<>();
-        Map<String, Integer> dailyActivity = new HashMap<>();
+        // 3. Issue 데이터 수집
+        List<Issue> issues = gitHubService.getRepositoryIssues(token, owner, repo);
 
-        for (Map<String, Object> commit : commits) {
-            Map<String, Object> commitData = (Map<String, Object>) commit.get("commit");
-            Map<String, Object> author = (Map<String, Object>) commitData.get("author");
-            String authorName = (String) author.get("name");
+        // 4. 커밋 통계 계산
+        long totalCommits = commits.size();
+        long userCommits = commits.stream()
+                .filter(commit -> commit.getCommit() != null
+                        && commit.getCommit().getAuthor() != null
+                        && username.equals(commit.getCommit().getAuthor().getName()))
+                .count();
 
-            // 이 사용자의 커밋인지 확인 (간단한 비교, 실제로는 더 정교한 로직 필요)
-            if (authorName != null && authorName.toLowerCase().contains(userLogin.toLowerCase())) {
-                userCommits++;
+        double commitPercentage = totalCommits > 0
+                ? (double) userCommits / totalCommits * 100
+                : 0.0;
 
-                // 시간대별 활동 (실제로는 날짜 파싱 필요)
-                int hour = new Random().nextInt(24); // 임시
-                hourlyActivity.merge(hour, 1, Integer::sum);
-            }
-        }
-
-        double commitPercentage = totalCommits > 0 ? (userCommits * 100.0 / totalCommits) : 0;
-
-        // 통계 저장
+        // 5. ContributionStats 생성 (Builder 패턴 사용)
         ContributionStats stats = ContributionStats.builder()
-                .id(UUID.randomUUID().toString())
-                .userId(userId)
+                .id(java.util.UUID.randomUUID().toString())
+                .userId(username)
                 .repositoryFullName(owner + "/" + repo)
-                .totalCommits(totalCommits)
-                .userCommits(userCommits)
+                .totalCommits((int) totalCommits)
+                .userCommits((int) userCommits)
                 .commitPercentage(commitPercentage)
-                .additions(additions)
-                .deletions(deletions)
-                .languageDistribution(new HashMap<>()) // 추후 구현
-                .hourlyActivity(hourlyActivity)
-                .dailyActivity(dailyActivity)
                 .analyzedAt(LocalDateTime.now())
                 .build();
 
-        contributionStatsRepository.save(stats);
-        log.info("Analysis completed: {}% contribution", String.format("%.2f", commitPercentage));
+        log.info("Contribution analysis completed for {}/{} - User: {}, Commits: {}/{}, PRs: {}, Issues: {}",
+                owner, repo, username, userCommits, totalCommits, pullRequests.size(), issues.size());
 
         return stats;
     }
 
-    public ContributionStats getStats(String statsId) {
-        return contributionStatsRepository.findById(statsId)
-                .orElseThrow(() -> new RuntimeException("Stats not found: " + statsId));
+    /**
+     * 사용자의 PR 목록 조회
+     */
+    public List<PullRequest> getUserPullRequests(String token, String owner, String repo, String username) {
+        List<PullRequest> pullRequests = gitHubService.getRepositoryPullRequests(token, owner, repo);
+
+        return pullRequests.stream()
+                .filter(pr -> pr.getUser() != null && username.equals(pr.getUser().getUsername()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 사용자의 Issue 목록 조회
+     */
+    public List<Issue> getUserIssues(String token, String owner, String repo, String username) {
+        List<Issue> issues = gitHubService.getRepositoryIssues(token, owner, repo);
+
+        return issues.stream()
+                .filter(issue -> issue.getUser() != null && username.equals(issue.getUser().getUsername()))
+                .collect(Collectors.toList());
     }
 }
