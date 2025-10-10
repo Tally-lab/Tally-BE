@@ -5,6 +5,7 @@ import com.tally.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.view.RedirectView;
 
 import java.util.Map;
 
@@ -34,23 +35,27 @@ public class AuthController {
     }
 
     /**
-     * GitHub OAuth Callback
+     * GitHub OAuth Callback - 프론트엔드로 리다이렉트
      */
     @GetMapping("/callback")
-    public ResponseEntity<?> handleCallback(@RequestParam String code) {
+    public RedirectView handleCallback(@RequestParam String code) {
         try {
             User user = authService.exchangeCodeForToken(code);
 
-            return ResponseEntity.ok(Map.of(
-                    "message", "Authentication successful",
-                    "accessToken", user.getAccessToken(),
-                    "user", user
-            ));
+            // ✅ 프론트엔드로 리다이렉트 (accessToken과 user 정보를 URL 파라미터로 전달)
+            String redirectUrl = String.format(
+                    "http://localhost:5173/auth/callback?accessToken=%s&userId=%s&username=%s&avatarUrl=%s",
+                    user.getAccessToken(),
+                    user.getId(),
+                    user.getUsername(),
+                    user.getAvatarUrl() != null ? user.getAvatarUrl() : ""
+            );
+
+            return new RedirectView(redirectUrl);
+
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Authentication failed",
-                    "message", e.getMessage()
-            ));
+            // 에러 시에도 프론트엔드로 리다이렉트
+            return new RedirectView("http://localhost:5173/?error=" + e.getMessage());
         }
     }
 }
