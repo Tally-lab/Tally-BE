@@ -1,110 +1,171 @@
 package com.tally.service;
 
-import com.tally.config.GitHubOAuthConfig;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tally.domain.User;
-import com.tally.dto.GitHubUserResponse;
-import com.tally.dto.OAuthTokenResponse;
-import com.tally.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
+import com.tally.util.JsonFileUtil;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.*;
+
+@Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuthService {
-    private final UserRepository userRepository;
-    private final GitHubOAuthConfig oauthConfig;
+
+    @Value("${github.client-id}")
+    private String clientId;
+
+    @Value("${github.client-secret}")
+    private String clientSecret;
+
     private final RestTemplate restTemplate = new RestTemplate();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String USERS_FILE = "data/users.json";
 
     /**
-     * 사용자 로그인 (Access Token으로)
+     * GitHub OAuth 코드로 액세스 토큰 받기
      */
-    public User login(String accessToken) {
-        User user = new User();
-        user.setAccessToken(accessToken);
-        return userRepository.save(user);
-    }
+    public String getAccessToken(String code) {
+        String tokenUrl = "https://github.com/login/oauth/access_token";
 
-    /**
-     * 사용자 조회
-     */
-    public User getUserByToken(String accessToken) {
-        return userRepository.findByAccessToken(accessToken)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-    }
-
-    /**
-     * GitHub OAuth 인증 URL 생성
-     */
-    public String getAuthorizationUrl() {
-        return String.format("%s?client_id=%s&redirect_uri=%s&scope=repo,user",
-                oauthConfig.getAuthUrl(),
-                oauthConfig.getClientId(),
-                oauthConfig.getRedirectUri());
-    }
-
-    /**
-     * Authorization Code를 Access Token으로 교환하고 사용자 정보 저장
-     */
-    public User exchangeCodeForToken(String code) {
-        // 1. Access Token 발급
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.set("Accept", "application/json");
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
 
-        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-        params.add("client_id", oauthConfig.getClientId());
-        params.add("client_secret", oauthConfig.getClientSecret());
-        params.add("code", code);
-        params.add("redirect_uri", oauthConfig.getRedirectUri());
+        Map<String, String> requestBody = new HashMap<>();
+        requestBody.put("client_id", clientId);
+        requestBody.put("client_secret", clientSecret);
+        requestBody.put("code", code);
 
-        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
+        HttpEntity<Map<String, String>> request = new HttpEntity<>(requestBody, headers);
 
-        ResponseEntity<OAuthTokenResponse> response = restTemplate.postForEntity(
-                oauthConfig.getTokenUrl(),
-                request,
-                OAuthTokenResponse.class
-        );
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    tokenUrl,
+                    HttpMethod.POST,
+                    request,
+                    String.class
+            );
 
-        if (response.getBody() == null) {
-            throw new RuntimeException("Failed to exchange code for token");
+            JsonNode jsonNode = objectMapper.readTree(response.getBody());
+            String accessToken = jsonNode.get("access_token").asText();
+
+            log.info("Successfully obtained access token");
+            return accessToken;
+
+        } catch (Exception e) {
+            log.error("Failed to get access token", e);
+            throw new RuntimeException("Failed to get access token: " + e.getMessage());
         }
-
-        String accessToken = response.getBody().getAccessToken();
-
-        // 2. GitHub 사용자 정보 가져오기
-        GitHubUserResponse githubUser = fetchGitHubUserInfo(accessToken);
-
-        // 3. User 객체 생성 및 저장
-        User user = new User();
-        user.setAccessToken(accessToken);
-        user.setUsername(githubUser.getLogin());
-        user.setEmail(githubUser.getEmail());
-        user.setAvatarUrl(githubUser.getAvatarUrl());
-
-        return userRepository.save(user);
     }
 
     /**
      * GitHub 사용자 정보 가져오기
      */
-    public GitHubUserResponse fetchGitHubUserInfo(String accessToken) {
+    public User getUserInfo(String accessToken) {
+        String userUrl = "https://api.github.com/user";
+
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "token " + accessToken);
-        headers.set("Accept", "application/json");
+        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
 
         HttpEntity<String> request = new HttpEntity<>(headers);
 
-        ResponseEntity<GitHubUserResponse> response = restTemplate.exchange(
-                "https://api.github.com/user",
-                HttpMethod.GET,
-                request,
-                GitHubUserResponse.class
-        );
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    userUrl,
+                    HttpMethod.GET,
+                    request,
+                    String.class
+            );
 
-        return response.getBody();
+            JsonNode jsonNode = objectMapper.readTree(response.getBody());
+
+            User user = new User();
+            user.setId(String.valueOf(jsonNode.get("id").asLong()));
+            user.setUsername(jsonNode.get("login").asText());
+
+            if (jsonNode.has("email") && !jsonNode.get("email").isNull()) {
+                user.setEmail(jsonNode.get("email").asText());
+            }
+
+            if (jsonNode.has("avatar_url")) {
+                user.setAvatarUrl(jsonNode.get("avatar_url").asText());
+            }
+
+            log.info("Successfully fetched user info for: {}", user.getUsername());
+            return user;
+
+        } catch (Exception e) {
+            log.error("Failed to get user info", e);
+            throw new RuntimeException("Failed to get user info: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 사용자 정보 저장
+     */
+    public void saveUser(User user) {
+        try {
+            List<User> users = loadUsers();
+
+            // 기존 사용자 찾기
+            Optional<User> existingUser = users.stream()
+                    .filter(u -> u.getId().equals(user.getId()))
+                    .findFirst();
+
+            if (existingUser.isPresent()) {
+                // 기존 사용자 업데이트
+                users.remove(existingUser.get());
+                users.add(user);
+                log.info("Updated existing user: {}", user.getUsername());
+            } else {
+                // 새 사용자 추가
+                users.add(user);
+                log.info("Added new user: {}", user.getUsername());
+            }
+
+            JsonFileUtil.saveToFile(USERS_FILE, users);
+
+        } catch (Exception e) {
+            log.error("Failed to save user", e);
+            throw new RuntimeException("Failed to save user: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 저장된 사용자 목록 불러오기
+     */
+    private List<User> loadUsers() {
+        try {
+            return JsonFileUtil.loadFromFile(USERS_FILE, User[].class);
+        } catch (Exception e) {
+            log.warn("No existing users file, creating new one");
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 사용자 ID로 조회
+     */
+    public Optional<User> findUserById(String userId) {
+        List<User> users = loadUsers();
+        return users.stream()
+                .filter(u -> u.getId().equals(userId))
+                .findFirst();
+    }
+
+    /**
+     * 사용자명으로 조회
+     */
+    public Optional<User> findUserByUsername(String username) {
+        List<User> users = loadUsers();
+        return users.stream()
+                .filter(u -> u.getUsername().equals(username))
+                .findFirst();
     }
 }

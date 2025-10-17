@@ -23,9 +23,11 @@ public class RepositoryController {
             @RequestHeader("Authorization") String authorization) {
 
         String accessToken = authorization.replace("Bearer ", "");
-        log.info("Fetching repositories for user");
+        log.info("Fetching all repositories for user (personal + organizations)");
 
-        List<GitHubRepository> repositories = gitHubService.getUserRepositories(accessToken);
+        List<GitHubRepository> repositories = gitHubService.getAllRepositories(accessToken);
+
+        log.info("Returning {} total repositories", repositories.size());
         return ResponseEntity.ok(repositories);
     }
 
