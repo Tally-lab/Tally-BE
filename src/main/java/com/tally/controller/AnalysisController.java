@@ -17,6 +17,30 @@ public class AnalysisController {
 
     private final ContributionAnalysisService analysisService;
 
+    /**
+     * GET 방식: URL 파라미터로 분석
+     */
+    @GetMapping("/{owner}/{repo}")
+    public ResponseEntity<ContributionStats> analyzeContributionByPath(
+            @PathVariable String owner,
+            @PathVariable String repo,
+            @RequestParam(required = false) String username,
+            @RequestHeader("Authorization") String authorization) {
+
+        String accessToken = authorization.replace("Bearer ", "");
+
+        log.info("Analyzing contribution for user {} in {}/{}", username, owner, repo);
+
+        ContributionStats stats = analysisService.analyzeContribution(
+                accessToken, owner, repo, username
+        );
+
+        return ResponseEntity.ok(stats);
+    }
+
+    /**
+     * POST 방식: Body로 분석 (기존 방식 유지)
+     */
     @PostMapping("/analyze")
     public ResponseEntity<ContributionStats> analyzeContribution(
             @RequestBody Map<String, String> request,
