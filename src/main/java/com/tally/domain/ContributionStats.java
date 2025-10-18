@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Getter
@@ -35,6 +36,9 @@ public class ContributionStats {
 
     // 역할 분석
     private Map<String, RoleStats> roleDistribution;    // 역할별 통계
+
+    private List<PullRequest> pullRequests;             // 사용자의 PR 목록
+    private List<Issue> issues;                         // 사용자의 Issue 목록
 
     private LocalDateTime analyzedAt;
 
