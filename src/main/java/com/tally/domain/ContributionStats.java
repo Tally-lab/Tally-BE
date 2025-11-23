@@ -18,7 +18,12 @@ import java.util.Map;
 public class ContributionStats {
     private String id;
     private String userId;
+    private String username;  // GitHub 사용자명
     private String repositoryFullName;
+
+    // 활동 기간
+    private String firstCommitDate;   // 첫 커밋 날짜
+    private String lastCommitDate;    // 마지막 커밋 날짜
 
     // 커밋 통계
     private int totalCommits;
@@ -39,6 +44,9 @@ public class ContributionStats {
 
     private List<PullRequest> pullRequests;             // 사용자의 PR 목록
     private List<Issue> issues;                         // 사용자의 Issue 목록
+
+    // AI 분석용 상세 정보
+    private List<String> commitMessages;                // 사용자의 커밋 메시지 목록 (최근 30개)
 
     private LocalDateTime analyzedAt;
 
