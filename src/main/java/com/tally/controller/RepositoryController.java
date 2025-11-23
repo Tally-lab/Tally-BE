@@ -1,5 +1,6 @@
 package com.tally.controller;
 
+import com.tally.domain.Commit;
 import com.tally.domain.GitHubRepository;
 import com.tally.service.GitHubService;
 import lombok.RequiredArgsConstructor;
@@ -8,7 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @RestController
@@ -23,14 +23,16 @@ public class RepositoryController {
             @RequestHeader("Authorization") String authorization) {
 
         String accessToken = authorization.replace("Bearer ", "");
-        log.info("Fetching repositories for user");
+        log.info("Fetching all repositories for user (personal + organizations)");
 
-        List<GitHubRepository> repositories = gitHubService.getUserRepositories(accessToken);
+        List<GitHubRepository> repositories = gitHubService.getAllRepositories(accessToken);
+
+        log.info("Returning {} total repositories", repositories.size());
         return ResponseEntity.ok(repositories);
     }
 
     @GetMapping("/{owner}/{repo}/commits")
-    public ResponseEntity<Map<String, Object>> getRepositoryCommits(
+    public ResponseEntity<List<Commit>> getRepositoryCommits(
             @PathVariable String owner,
             @PathVariable String repo,
             @RequestHeader("Authorization") String authorization) {
@@ -38,7 +40,7 @@ public class RepositoryController {
         String accessToken = authorization.replace("Bearer ", "");
         log.info("Fetching commits for {}/{}", owner, repo);
 
-        Map<String, Object> commits = gitHubService.getRepositoryCommits(accessToken, owner, repo);
+        List<Commit> commits = gitHubService.getRepositoryCommits(accessToken, owner, repo);
         return ResponseEntity.ok(commits);
     }
 }

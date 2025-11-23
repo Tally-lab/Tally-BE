@@ -17,29 +17,46 @@ public class AnalysisController {
 
     private final ContributionAnalysisService analysisService;
 
-    @PostMapping("/analyze")
-    public ResponseEntity<ContributionStats> analyzeContribution(
-            @RequestBody Map<String, String> request,
+    /**
+     * GET 방식: URL 파라미터로 분석
+     */
+    @GetMapping("/{owner}/{repo}")
+    public ResponseEntity<ContributionStats> analyzeContributionByPath(
+            @PathVariable String owner,
+            @PathVariable String repo,
+            @RequestParam(required = false) String username,
             @RequestHeader("Authorization") String authorization) {
 
-        String userId = request.get("userId");
-        String owner = request.get("owner");
-        String repo = request.get("repo");
-        String userLogin = request.get("userLogin");
         String accessToken = authorization.replace("Bearer ", "");
 
-        log.info("Analyzing contribution for user {} in {}/{}", userLogin, owner, repo);
+        log.info("Analyzing contribution for user {} in {}/{}", username, owner, repo);
 
         ContributionStats stats = analysisService.analyzeContribution(
-                userId, accessToken, owner, repo, userLogin
+                accessToken, owner, repo, username
         );
 
         return ResponseEntity.ok(stats);
     }
 
-    @GetMapping("/stats/{statsId}")
-    public ResponseEntity<ContributionStats> getStats(@PathVariable String statsId) {
-        ContributionStats stats = analysisService.getStats(statsId);
+    /**
+     * POST 방식: Body로 분석 (기존 방식 유지)
+     */
+    @PostMapping("/analyze")
+    public ResponseEntity<ContributionStats> analyzeContribution(
+            @RequestBody Map<String, String> request,
+            @RequestHeader("Authorization") String authorization) {
+
+        String owner = request.get("owner");
+        String repo = request.get("repo");
+        String username = request.get("username");
+        String accessToken = authorization.replace("Bearer ", "");
+
+        log.info("Analyzing contribution for user {} in {}/{}", username, owner, repo);
+
+        ContributionStats stats = analysisService.analyzeContribution(
+                accessToken, owner, repo, username
+        );
+
         return ResponseEntity.ok(stats);
     }
 }

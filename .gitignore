@@ -41,3 +41,9 @@ out/
 
 ### Application ###
 application-local.yml
+data/
+
+### AWS SAM ###
+.aws-sam/
+samconfig.toml
+.env

@@ -1,6 +1,8 @@
 spring:
   application:
     name: tally
+  profiles:
+    active: local
   servlet:
     multipart:
       max-file-size: 100MB

@@ -1,22 +1,41 @@
 package com.tally.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
+import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
-@Getter
+@Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class User {
     private String id;
-    private String githubId;              // GitHub 사용자 ID
-    private String githubLogin;           // GitHub username
-    private String githubAccessToken;     // OAuth Access Token
-    private String avatarUrl;             // 프로필 이미지
-    private LocalDateTime createdAt;
-    private LocalDateTime lastLoginAt;
+
+    @JsonProperty("login")
+    private String username;
+
+    private String accessToken;
+    private String email;
+
+    @JsonProperty("avatar_url")
+    private String avatarUrl;
+
+    /**
+     * ✅ GitHub API 호환을 위한 getLogin() 메서드
+     * @JsonIgnore로 Jackson 직렬화에서 제외
+     */
+    @JsonIgnore
+    public String getLogin() {
+        return this.username;
+    }
+
+    /**
+     * ✅ GitHub API 호환을 위한 setLogin() 메서드
+     */
+    public void setLogin(String login) {
+        this.username = login;
+    }
 }

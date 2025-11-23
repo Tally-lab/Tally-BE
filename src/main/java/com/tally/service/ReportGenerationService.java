@@ -1,91 +1,227 @@
 package com.tally.service;
 
-import com.tally.domain.ContributionStats;
-import com.tally.domain.Report;
+import com.tally.domain.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReportGenerationService {
-
     private final ContributionAnalysisService analysisService;
 
-    public Report generateMarkdownReport(String statsId) {
-        ContributionStats stats = analysisService.getStats(statsId);
+    /**
+     * Markdown 리포트 생성
+     */
+    public Report generateMarkdownReport(String token, String owner, String repo, String username) {
+        ContributionStats stats = analysisService.analyzeContribution(token, owner, repo, username);
+        List<PullRequest> userPRs = analysisService.getUserPullRequests(token, owner, repo, username);
+        List<Issue> userIssues = analysisService.getUserIssues(token, owner, repo, username);
 
         StringBuilder markdown = new StringBuilder();
-        markdown.append("# 프로젝트 기여도 리포트\n\n");
-        markdown.append("## 기본 정보\n");
-        markdown.append(String.format("- **프로젝트**: %s\n", stats.getRepositoryFullName()));
-        markdown.append(String.format("- **분석 일시**: %s\n\n",
-                stats.getAnalyzedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
 
-        markdown.append("## 기여 통계\n");
-        markdown.append(String.format("- **총 커밋 수**: %d개\n", stats.getTotalCommits()));
-        markdown.append(String.format("- **내 커밋 수**: %d개\n", stats.getUserCommits()));
-        markdown.append(String.format("- **기여율**: %.2f%%\n", stats.getCommitPercentage()));
-        markdown.append(String.format("- **코드 추가**: +%d 라인\n", stats.getAdditions()));
-        markdown.append(String.format("- **코드 삭제**: -%d 라인\n\n", stats.getDeletions()));
+        // 헤더
+        markdown.append(String.format("# %s 기여도 리포트\n\n", repo));
+        markdown.append(String.format("**분석 대상:** %s\n", username));
+        markdown.append(String.format("**생성 일시:** %s\n\n",
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
 
-        markdown.append("## 활동 패턴\n");
-        markdown.append("### 시간대별 커밋 수\n");
-        Map<Integer, Integer> hourly = stats.getHourlyActivity();
-        if (hourly != null && !hourly.isEmpty()) {
-            hourly.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey())
-                    .forEach(entry -> markdown.append(String.format("- %02d:00 - %d회\n", entry.getKey(), entry.getValue())));
+        markdown.append("---\n\n");
+
+        // 기본 정보
+        markdown.append("## 기본 정보\n\n");
+        markdown.append(String.format("- **총 커밋 수:** %d개\n", stats.getTotalCommits()));
+        markdown.append(String.format("- **내 커밋 수:** %d개\n", stats.getUserCommits()));
+        markdown.append(String.format("- **기여도:** %.1f%%\n\n", stats.getCommitPercentage()));
+
+        // 역할 분석 (NEW!)
+        if (stats.getRoleDistribution() != null && !stats.getRoleDistribution().isEmpty()) {
+            markdown.append("## 역할 분석\n\n");
+
+            // 비율 순으로 정렬
+            List<Map.Entry<String, ContributionStats.RoleStats>> sortedRoles =
+                    stats.getRoleDistribution().entrySet().stream()
+                            .sorted((a, b) -> Double.compare(b.getValue().getPercentage(), a.getValue().getPercentage()))
+                            .collect(Collectors.toList());
+
+            for (Map.Entry<String, ContributionStats.RoleStats> entry : sortedRoles) {
+                ContributionStats.RoleStats roleStats = entry.getValue();
+                markdown.append(generateProgressBar(roleStats.getPercentage()));
+                markdown.append(String.format(" **%s** %.1f%% (%d개)\n",
+                        roleStats.getRoleName(),
+                        roleStats.getPercentage(),
+                        roleStats.getCommitCount()));
+            }
+            markdown.append("\n");
         }
 
-        String content = markdown.toString();
+        // 구현한 기능 (PR)
+        markdown.append("## 구현한 기능\n\n");
+        if (userPRs.isEmpty()) {
+            markdown.append("- 작성한 Pull Request가 없습니다.\n\n");
+        } else {
+            for (PullRequest pr : userPRs) {
+                String state = "merged".equals(pr.getState()) || pr.getMergedAt() != null ? "✅" :
+                        "closed".equals(pr.getState()) ? "❌" : "🔄";
+                markdown.append(String.format("- %s %s (PR #%d)\n", state, pr.getTitle(), pr.getNumber()));
+            }
+            markdown.append("\n");
+        }
 
-        Report report = Report.builder()
+        // 해결한 문제 (Issue)
+        markdown.append("## 해결한 문제\n\n");
+        if (userIssues.isEmpty()) {
+            markdown.append("- 작성한 Issue가 없습니다.\n\n");
+        } else {
+            for (Issue issue : userIssues) {
+                String state = "closed".equals(issue.getState()) ? "✅" : "🔄";
+                markdown.append(String.format("- %s %s (Issue #%d)\n", state, issue.getTitle(), issue.getNumber()));
+            }
+            markdown.append("\n");
+        }
+
+        markdown.append("---\n\n");
+        markdown.append("*Generated by Tally*\n");
+
+        return Report.builder()
                 .id(UUID.randomUUID().toString())
-                .userId(stats.getUserId())
-                .contributionStatsId(statsId)
+                .userId(username)
+                .contributionStatsId(stats.getId())
                 .format(Report.ReportFormat.MARKDOWN)
-                .content(content)
+                .content(markdown.toString())
                 .generatedAt(LocalDateTime.now())
                 .build();
-
-        log.info("Markdown report generated for stats: {}", statsId);
-        return report;
     }
 
-    public Report generateHtmlReport(String statsId) {
-        ContributionStats stats = analysisService.getStats(statsId);
+    /**
+     * HTML 리포트 생성
+     */
+    public Report generateHtmlReport(String token, String owner, String repo, String username) {
+        ContributionStats stats = analysisService.analyzeContribution(token, owner, repo, username);
+        List<PullRequest> userPRs = analysisService.getUserPullRequests(token, owner, repo, username);
+        List<Issue> userIssues = analysisService.getUserIssues(token, owner, repo, username);
 
         StringBuilder html = new StringBuilder();
+
         html.append("<!DOCTYPE html>\n");
-        html.append("<html><head><meta charset='UTF-8'>\n");
-        html.append("<title>기여도 리포트</title>\n");
-        html.append("<style>body{font-family:Arial;margin:40px;}</style>\n");
-        html.append("</head><body>\n");
-        html.append("<h1>프로젝트 기여도 리포트</h1>\n");
-        html.append(String.format("<p><strong>프로젝트:</strong> %s</p>\n", stats.getRepositoryFullName()));
-        html.append(String.format("<p><strong>기여율:</strong> %.2f%%</p>\n", stats.getCommitPercentage()));
-        html.append(String.format("<p><strong>내 커밋:</strong> %d / %d</p>\n", stats.getUserCommits(), stats.getTotalCommits()));
-        html.append("</body></html>");
+        html.append("<html lang=\"ko\">\n");
+        html.append("<head>\n");
+        html.append("    <meta charset=\"UTF-8\">\n");
+        html.append("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n");
+        html.append(String.format("    <title>%s 기여도 리포트</title>\n", repo));
+        html.append("    <style>\n");
+        html.append("        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; background-color: #f5f5f5; }\n");
+        html.append("        .container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }\n");
+        html.append("        h1 { color: #333; border-bottom: 3px solid #4CAF50; padding-bottom: 10px; }\n");
+        html.append("        h2 { color: #555; margin-top: 30px; }\n");
+        html.append("        .stats { background: #e8f5e9; padding: 20px; border-radius: 5px; margin: 20px 0; }\n");
+        html.append("        .stats p { margin: 10px 0; font-size: 18px; }\n");
+        html.append("        .role-item { margin: 10px 0; }\n");
+        html.append("        .role-bar { background: #e0e0e0; height: 30px; border-radius: 5px; overflow: hidden; margin: 5px 0; }\n");
+        html.append("        .role-fill { background: #4CAF50; height: 100%; display: flex; align-items: center; padding-left: 10px; color: white; font-weight: bold; }\n");
+        html.append("        .list-item { padding: 10px; margin: 5px 0; background: #f9f9f9; border-left: 4px solid #4CAF50; }\n");
+        html.append("        .footer { text-align: center; margin-top: 40px; color: #999; font-size: 14px; }\n");
+        html.append("    </style>\n");
+        html.append("</head>\n");
+        html.append("<body>\n");
+        html.append("    <div class=\"container\">\n");
 
-        String content = html.toString();
+        html.append(String.format("        <h1>%s 기여도 리포트</h1>\n", repo));
+        html.append(String.format("        <p><strong>분석 대상:</strong> %s</p>\n", username));
+        html.append(String.format("        <p><strong>생성 일시:</strong> %s</p>\n",
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
 
-        Report report = Report.builder()
+        html.append("        <div class=\"stats\">\n");
+        html.append("            <h2>기본 정보</h2>\n");
+        html.append(String.format("            <p>총 커밋 수: <strong>%d개</strong></p>\n", stats.getTotalCommits()));
+        html.append(String.format("            <p>내 커밋 수: <strong>%d개</strong></p>\n", stats.getUserCommits()));
+        html.append(String.format("            <p>기여도: <strong>%.1f%%</strong></p>\n", stats.getCommitPercentage()));
+        html.append("        </div>\n");
+
+        // 역할 분석 (NEW!)
+        if (stats.getRoleDistribution() != null && !stats.getRoleDistribution().isEmpty()) {
+            html.append("        <h2>역할 분석</h2>\n");
+
+            // 비율 순으로 정렬
+            List<Map.Entry<String, ContributionStats.RoleStats>> sortedRoles =
+                    stats.getRoleDistribution().entrySet().stream()
+                            .sorted((a, b) -> Double.compare(b.getValue().getPercentage(), a.getValue().getPercentage()))
+                            .collect(Collectors.toList());
+
+            for (Map.Entry<String, ContributionStats.RoleStats> entry : sortedRoles) {
+                ContributionStats.RoleStats roleStats = entry.getValue();
+                html.append("        <div class=\"role-item\">\n");
+                html.append(String.format("            <p><strong>%s</strong>: %.1f%% (%d개)</p>\n",
+                        roleStats.getRoleName(), roleStats.getPercentage(), roleStats.getCommitCount()));
+                html.append("            <div class=\"role-bar\">\n");
+                html.append(String.format("                <div class=\"role-fill\" style=\"width: %.1f%%\">%.1f%%</div>\n",
+                        roleStats.getPercentage(), roleStats.getPercentage()));
+                html.append("            </div>\n");
+                html.append("        </div>\n");
+            }
+        }
+
+        html.append("        <h2>구현한 기능 (Pull Requests)</h2>\n");
+        if (userPRs.isEmpty()) {
+            html.append("        <p>작성한 Pull Request가 없습니다.</p>\n");
+        } else {
+            for (PullRequest pr : userPRs) {
+                String state = "merged".equals(pr.getState()) || pr.getMergedAt() != null ? "✅" :
+                        "closed".equals(pr.getState()) ? "❌" : "🔄";
+                html.append(String.format("        <div class=\"list-item\">%s %s <small>(PR #%d)</small></div>\n",
+                        state, pr.getTitle(), pr.getNumber()));
+            }
+        }
+
+        html.append("        <h2>해결한 문제 (Issues)</h2>\n");
+        if (userIssues.isEmpty()) {
+            html.append("        <p>작성한 Issue가 없습니다.</p>\n");
+        } else {
+            for (Issue issue : userIssues) {
+                String state = "closed".equals(issue.getState()) ? "✅" : "🔄";
+                html.append(String.format("        <div class=\"list-item\">%s %s <small>(Issue #%d)</small></div>\n",
+                        state, issue.getTitle(), issue.getNumber()));
+            }
+        }
+
+        html.append("        <div class=\"footer\">Generated by Tally</div>\n");
+        html.append("    </div>\n");
+        html.append("</body>\n");
+        html.append("</html>\n");
+
+        return Report.builder()
                 .id(UUID.randomUUID().toString())
-                .userId(stats.getUserId())
-                .contributionStatsId(statsId)
+                .userId(username)
+                .contributionStatsId(stats.getId())
                 .format(Report.ReportFormat.HTML)
-                .content(content)
+                .content(html.toString())
                 .generatedAt(LocalDateTime.now())
                 .build();
+    }
 
-        log.info("HTML report generated for stats: {}", statsId);
-        return report;
+    /**
+     * 진행바 생성 (Markdown용)
+     */
+    private String generateProgressBar(double percentage) {
+        int filled = (int) Math.round(percentage / 10);
+        int empty = 10 - filled;
+
+        StringBuilder bar = new StringBuilder();
+        for (int i = 0; i < filled; i++) {
+            bar.append("■");
+        }
+        for (int i = 0; i < empty; i++) {
+            bar.append("□");
+        }
+
+        return bar.toString();
     }
 }

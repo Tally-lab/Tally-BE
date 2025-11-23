@@ -35,8 +35,28 @@ dependencies {
 
     // Swagger/OpenAPI
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
+
+    // AWS Lambda
+    implementation 'com.amazonaws:aws-lambda-java-core:1.2.3'
+    implementation 'com.amazonaws:aws-lambda-java-events:3.11.4'
+
+    // AWS Bedrock (AI)
+    implementation 'software.amazon.awssdk:bedrockruntime:2.21.0'
+
+    // PDF Generation (OpenPDF - LGPL/MPL licensed, free)
+    implementation 'com.github.librepdf:openpdf:1.3.35'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+// Lambda 배포용 JAR 빌드 태스크
+task buildLambdaZip(type: Zip) {
+    from compileJava
+    from processResources
+    into('lib') {
+        from configurations.runtimeClasspath
+    }
+    archiveFileName = 'tally-lambda.zip'
 }
