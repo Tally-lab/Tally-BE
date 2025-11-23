@@ -1,9 +1,7 @@
 package com.tally.service;
 
 import com.tally.domain.*;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -13,10 +11,16 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
-@Service
-@RequiredArgsConstructor
 public class ReportGenerationService {
     private final ContributionAnalysisService analysisService;
+
+    public ReportGenerationService() {
+        this.analysisService = new ContributionAnalysisService();
+    }
+
+    public ReportGenerationService(ContributionAnalysisService analysisService) {
+        this.analysisService = analysisService;
+    }
 
     /**
      * Markdown 리포트 생성

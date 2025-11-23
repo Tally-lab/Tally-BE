@@ -30,6 +30,9 @@ public class OrganizationStats {
     private int totalIssues;
     private int totalPullRequests;
 
+    // 팀원별 기여도
+    private List<TeamMember> teamMembers;
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -42,5 +45,16 @@ public class OrganizationStats {
         private int userCommits;
         private double contributionPercentage;
         private String lastUpdated;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TeamMember {
+        private String login;
+        private String avatarUrl;
+        private int commits;
+        private double contributionPercentage;
     }
 }

@@ -8,7 +8,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -45,7 +47,7 @@ public class OrganizationController {
             @RequestParam(required = false) String username) {
 
         String accessToken = authorization.replace("Bearer ", "");
-        log.info("Fetching stats for organization: {}", orgName);
+        log.info("Fetching stats for organization: {}, username: {}", orgName, username);
 
         // 조직의 모든 레포지토리 가져오기
         List<GitHubRepository> orgRepos = gitHubService.getOrganizationRepositories(accessToken, orgName);
@@ -57,10 +59,34 @@ public class OrganizationController {
 
         List<OrganizationStats.RepositoryContribution> repoContributions = new ArrayList<>();
 
+        // 팀원별 커밋 수 추적 (login -> [commits, avatarUrl])
+        Map<String, int[]> memberCommits = new HashMap<>();
+        Map<String, String> memberAvatars = new HashMap<>();
+
         // 각 레포지토리별 통계 계산
         for (GitHubRepository repo : orgRepos) {
             try {
                 List<Commit> commits = gitHubService.getRepositoryCommits(accessToken, orgName, repo.getName());
+
+                // 팀원별 커밋 수집
+                for (Commit commit : commits) {
+                    String authorLogin = null;
+                    String authorAvatar = null;
+
+                    if (commit.getAuthor() != null && commit.getAuthor().getLogin() != null) {
+                        authorLogin = commit.getAuthor().getLogin();
+                        authorAvatar = commit.getAuthor().getAvatarUrl();
+                    } else if (commit.getCommit() != null && commit.getCommit().getAuthor() != null) {
+                        authorLogin = commit.getCommit().getAuthor().getName();
+                    }
+
+                    if (authorLogin != null && !authorLogin.isEmpty()) {
+                        memberCommits.computeIfAbsent(authorLogin, k -> new int[1])[0]++;
+                        if (authorAvatar != null) {
+                            memberAvatars.putIfAbsent(authorLogin, authorAvatar);
+                        }
+                    }
+                }
 
                 long repoUserCommits = 0;
                 if (username != null && !username.isEmpty()) {
@@ -86,19 +112,18 @@ public class OrganizationController {
                         ? (repoUserCommits * 100.0 / repoTotalCommits)
                         : 0.0;
 
-                if (repoUserCommits > 0) {
-                    OrganizationStats.RepositoryContribution contribution = OrganizationStats.RepositoryContribution.builder()
-                            .name(repo.getName())
-                            .fullName(repo.getFullName())
-                            .url(repo.getUrl())
-                            .totalCommits(repoTotalCommits)
-                            .userCommits((int) repoUserCommits)
-                            .contributionPercentage(Math.round(repoContributionPercentage * 10.0) / 10.0)
-                            .lastUpdated(repo.getUpdatedAt())
-                            .build();
+                // 모든 레포지토리를 포함 (기여도 0%도 포함)
+                OrganizationStats.RepositoryContribution contribution = OrganizationStats.RepositoryContribution.builder()
+                        .name(repo.getName())
+                        .fullName(repo.getFullName())
+                        .url(repo.getUrl())
+                        .totalCommits(repoTotalCommits)
+                        .userCommits((int) repoUserCommits)
+                        .contributionPercentage(Math.round(repoContributionPercentage * 10.0) / 10.0)
+                        .lastUpdated(repo.getUpdatedAt())
+                        .build();
 
-                    repoContributions.add(contribution);
-                }
+                repoContributions.add(contribution);
 
                 List<Issue> issues = gitHubService.getRepositoryIssues(accessToken, orgName, repo.getName());
                 List<PullRequest> prs = gitHubService.getRepositoryPullRequests(accessToken, orgName, repo.getName());
@@ -121,17 +146,40 @@ public class OrganizationController {
             avatarUrl = orgRepos.get(0).getOwner().getAvatarUrl();
         }
 
+        // 기여도 순으로 정렬 (높은 기여도부터)
+        repoContributions.sort((a, b) -> Double.compare(b.getContributionPercentage(), a.getContributionPercentage()));
+
+        // 기여한 레포지토리 수 계산 (userCommits > 0)
+        long contributedRepoCount = repoContributions.stream()
+                .filter(r -> r.getUserCommits() > 0)
+                .count();
+
+        // 팀원 리스트 생성 (커밋 수 기준 내림차순)
+        final int finalTotalCommits = totalCommits;
+        List<OrganizationStats.TeamMember> teamMembers = memberCommits.entrySet().stream()
+                .map(entry -> OrganizationStats.TeamMember.builder()
+                        .login(entry.getKey())
+                        .avatarUrl(memberAvatars.get(entry.getKey()))
+                        .commits(entry.getValue()[0])
+                        .contributionPercentage(finalTotalCommits > 0
+                                ? Math.round(entry.getValue()[0] * 1000.0 / finalTotalCommits) / 10.0
+                                : 0.0)
+                        .build())
+                .sorted((a, b) -> Integer.compare(b.getCommits(), a.getCommits()))
+                .toList();
+
         OrganizationStats stats = OrganizationStats.builder()
                 .organizationName(orgName)
                 .avatarUrl(avatarUrl)
                 .description(description)
-                .totalRepositories(repoContributions.size())
+                .totalRepositories((int) contributedRepoCount)  // 기여한 레포지토리 수
                 .totalCommits(totalCommits)
                 .userCommits(userCommits)
                 .contributionPercentage(Math.round(overallContributionPercentage * 10.0) / 10.0)
-                .repositories(repoContributions)
+                .repositories(repoContributions)  // 모든 레포지토리 (0% 포함)
                 .totalIssues(totalIssues)
                 .totalPullRequests(totalPullRequests)
+                .teamMembers(teamMembers)
                 .build();
 
         log.info("Organization {} stats: {} repos, {}/{} commits ({}%)",
