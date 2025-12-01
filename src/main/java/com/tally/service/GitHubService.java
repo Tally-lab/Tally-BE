@@ -6,14 +6,12 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
-@Service
 public class GitHubService {
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -213,7 +211,73 @@ public class GitHubService {
     }
 
     /**
-     * 레포지토리의 커밋 목록 조회
+     * 레포지토리의 모든 브랜치 목록 조회
+     */
+    /**
+     * 주요 브랜치 선택 (main, master, develop 우선)
+     */
+    private List<String> selectPrimaryBranches(List<String> branches, int limit) {
+        if (branches.size() <= limit) {
+            return branches;
+        }
+
+        List<String> primaryBranches = new ArrayList<>();
+        List<String> primaryNames = Arrays.asList("main", "master", "develop", "dev", "production", "prod");
+
+        // 주요 브랜치 먼저 추가
+        for (String name : primaryNames) {
+            if (branches.contains(name)) {
+                primaryBranches.add(name);
+                if (primaryBranches.size() >= limit) {
+                    return primaryBranches;
+                }
+            }
+        }
+
+        // 주요 브랜치가 limit보다 적으면 나머지 브랜치 추가
+        for (String branch : branches) {
+            if (!primaryBranches.contains(branch)) {
+                primaryBranches.add(branch);
+                if (primaryBranches.size() >= limit) {
+                    break;
+                }
+            }
+        }
+
+        return primaryBranches;
+    }
+
+    public List<String> getRepositoryBranches(String token, String owner, String repo) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "token " + token);
+        headers.set("Accept", "application/json");
+
+        HttpEntity<String> request = new HttpEntity<>(headers);
+
+        String url = String.format("https://api.github.com/repos/%s/%s/branches?per_page=100", owner, repo);
+
+        try {
+            ResponseEntity<Map[]> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    request,
+                    Map[].class
+            );
+
+            if (response.getBody() != null) {
+                return Arrays.stream(response.getBody())
+                        .map(branch -> (String) branch.get("name"))
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch branches for {}/{}: {}", owner, repo, e.getMessage());
+        }
+
+        return new ArrayList<>();
+    }
+
+    /**
+     * 레포지토리의 커밋 목록 조회 (모든 브랜치에서)
      */
     public List<Commit> getRepositoryCommits(String token, String owner, String repo) {
         HttpHeaders headers = new HttpHeaders();
@@ -222,24 +286,45 @@ public class GitHubService {
 
         HttpEntity<String> request = new HttpEntity<>(headers);
 
-        String url = String.format("https://api.github.com/repos/%s/%s/commits?per_page=100", owner, repo);
+        // 1. 모든 브랜치 가져오기
+        List<String> branches = getRepositoryBranches(token, owner, repo);
+        log.info("Found {} branches in {}/{}", branches.size(), owner, repo);
 
-        try {
-            ResponseEntity<Commit[]> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    request,
-                    Commit[].class
-            );
+        // 2. 각 브랜치에서 커밋 가져오기 (중복 제거용 Set)
+        Set<String> seenShas = new HashSet<>();
+        List<Commit> allCommits = new ArrayList<>();
 
-            if (response.getBody() != null) {
-                return Arrays.asList(response.getBody());
+        // 브랜치가 너무 많으면 주요 브랜치만 (성능 고려 - API Gateway 타임아웃 29초)
+        List<String> targetBranches = selectPrimaryBranches(branches, 2);
+
+        for (String branch : targetBranches) {
+            String url = String.format("https://api.github.com/repos/%s/%s/commits?sha=%s&per_page=100",
+                    owner, repo, branch);
+
+            try {
+                ResponseEntity<Commit[]> response = restTemplate.exchange(
+                        url,
+                        HttpMethod.GET,
+                        request,
+                        Commit[].class
+                );
+
+                if (response.getBody() != null) {
+                    for (Commit commit : response.getBody()) {
+                        // SHA로 중복 제거
+                        if (commit.getSha() != null && !seenShas.contains(commit.getSha())) {
+                            seenShas.add(commit.getSha());
+                            allCommits.add(commit);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch commits for branch {} in {}/{}: {}", branch, owner, repo, e.getMessage());
             }
-        } catch (Exception e) {
-            log.error("Failed to fetch commits for {}/{}: {}", owner, repo, e.getMessage());
         }
 
-        return new ArrayList<>();
+        log.info("Total unique commits from {} branches: {}", targetBranches.size(), allCommits.size());
+        return allCommits;
     }
 
     /**
