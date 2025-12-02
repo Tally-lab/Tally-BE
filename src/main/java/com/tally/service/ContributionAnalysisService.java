@@ -1,19 +1,23 @@
 package com.tally.service;
 
 import com.tally.domain.*;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
-@Service
-@RequiredArgsConstructor
 public class ContributionAnalysisService {
     private final GitHubService gitHubService;
+
+    public ContributionAnalysisService() {
+        this.gitHubService = new GitHubService();
+    }
+
+    public ContributionAnalysisService(GitHubService gitHubService) {
+        this.gitHubService = gitHubService;
+    }
 
     /**
      * 레포지토리 기여도 분석
@@ -64,9 +68,33 @@ public class ContributionAnalysisService {
 
         long userCommits = userCommitList.size();
 
+        // 4.1 활동 기간 계산 (사용자 커밋 날짜 기준)
+        String firstCommitDate = null;
+        String lastCommitDate = null;
+        if (!userCommitList.isEmpty()) {
+            List<String> commitDates = userCommitList.stream()
+                    .filter(c -> c.getCommit() != null && c.getCommit().getAuthor() != null
+                            && c.getCommit().getAuthor().getDate() != null)
+                    .map(c -> c.getCommit().getAuthor().getDate().substring(0, 10)) // YYYY-MM-DD
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            if (!commitDates.isEmpty()) {
+                firstCommitDate = commitDates.get(0);
+                lastCommitDate = commitDates.get(commitDates.size() - 1);
+            }
+        }
+
         double commitPercentage = totalCommits > 0
                 ? (double) userCommits / totalCommits * 100
                 : 0.0;
+
+        // 4.5 커밋 메시지 추출 (AI 분석용, 최근 30개)
+        List<String> commitMessages = userCommitList.stream()
+                .filter(c -> c.getCommit() != null && c.getCommit().getMessage() != null)
+                .map(c -> c.getCommit().getMessage().split("\n")[0]) // 첫 줄만 (제목)
+                .limit(30)
+                .collect(Collectors.toList());
 
         // 5. 역할 분석 수행
         Map<String, ContributionStats.RoleStats> roleDistribution = analyzeRoles(
@@ -77,13 +105,17 @@ public class ContributionAnalysisService {
         ContributionStats stats = ContributionStats.builder()
                 .id(UUID.randomUUID().toString())
                 .userId(username)
+                .username(username)
                 .repositoryFullName(owner + "/" + repo)
+                .firstCommitDate(firstCommitDate)
+                .lastCommitDate(lastCommitDate)
                 .totalCommits((int) totalCommits)
                 .userCommits((int) userCommits)
                 .commitPercentage(commitPercentage)
                 .roleDistribution(roleDistribution)
                 .pullRequests(userPRs)
                 .issues(userIssues)
+                .commitMessages(commitMessages)
                 .analyzedAt(LocalDateTime.now())
                 .build();
 
@@ -96,7 +128,7 @@ public class ContributionAnalysisService {
     }
 
     /**
-     * 역할 분석
+     * 역할 분석 (성능 최적화: 최근 20개 커밋만 분석)
      */
     private Map<String, ContributionStats.RoleStats> analyzeRoles(
             String token, String owner, String repo, String username, List<Commit> userCommits) {
@@ -105,7 +137,15 @@ public class ContributionAnalysisService {
         Map<String, List<String>> roleFileExamples = new HashMap<>(); // 파일 예시 저장
         int totalAnalyzedCommits = 0;
 
-        for (Commit commit : userCommits) {
+        // 성능 최적화: 최근 20개 커밋만 상세 분석
+        List<Commit> commitsToAnalyze = userCommits.size() > 20
+            ? userCommits.subList(0, 20)
+            : userCommits;
+
+        log.info("Analyzing {} commits out of {} total (performance optimization)",
+            commitsToAnalyze.size(), userCommits.size());
+
+        for (Commit commit : commitsToAnalyze) {
             // 커밋 상세 정보 조회 (파일 목록 포함)
             Commit detailedCommit = gitHubService.getCommitDetail(token, owner, repo, commit.getSha());
 

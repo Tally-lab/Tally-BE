@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Tally - GitHub Contribution Analytics API
+
+Globals:
+  Function:
+    Timeout: 120
+    MemorySize: 2048
+    Runtime: java17
+    Architectures:
+      - x86_64
+
+Resources:
+  TallyAPI:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: tally-api
+      Handler: com.tally.lambda.TallyLambdaHandler::handleRequest
+      CodeUri: .
+      Description: Tally GitHub Analytics API
+
+      # SnapStart 활성화 (콜드스타트 감소)
+      SnapStart:
+        ApplyOn: PublishedVersions
+
+      AutoPublishAlias: live
+
+      Environment:
+        Variables:
+          GITHUB_CLIENT_ID: !Ref GitHubClientId
+          GITHUB_CLIENT_SECRET: !Ref GitHubClientSecret
+          GITHUB_REDIRECT_URI: !Ref GitHubRedirectUri
+          FRONTEND_URL: !Ref FrontendUrl
+          BEDROCK_REGION: "us-east-1"
+
+      Policies:
+        # Bedrock 접근 권한
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: "*"
+        # AWS Marketplace 권한 (Bedrock 모델 접근에 필요)
+        - Statement:
+            - Effect: Allow
+              Action:
+                - aws-marketplace:Subscribe
+                - aws-marketplace:Unsubscribe
+                - aws-marketplace:ViewSubscriptions
+              Resource: "*"
+
+      Events:
+        ApiRoot:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+        ApiProxy:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+Parameters:
+  GitHubClientId:
+    Type: String
+    Description: GitHub OAuth App Client ID
+    Default: ""
+
+  GitHubClientSecret:
+    Type: String
+    Description: GitHub OAuth App Client Secret
+    NoEcho: true
+    Default: ""
+
+  GitHubRedirectUri:
+    Type: String
+    Description: GitHub OAuth Callback URI (update after first deploy)
+    Default: "http://localhost:8080/auth/callback"
+
+  FrontendUrl:
+    Type: String
+    Description: Frontend URL for OAuth redirect
+    Default: "http://localhost:5173"
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  FunctionArn:
+    Description: "Lambda Function ARN"
+    Value: !GetAtt TallyAPI.Arn
+
+  AuthCallbackUrl:
+    Description: "GitHub OAuth Callback URL (set this in GitHub OAuth App settings)"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/auth/callback"
