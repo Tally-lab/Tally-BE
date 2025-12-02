@@ -10,6 +10,7 @@ import com.tally.domain.*;
 import com.tally.service.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -194,7 +195,10 @@ public class TallyLambdaHandler implements RequestHandler<APIGatewayProxyRequest
                 ? input.getQueryStringParameters().get("username")
                 : null;
 
-            List<GitHubRepository> repos = gitHubService.getUserRepositoriesInOrganization(token, orgName, username);
+            List<GitHubRepository> allRepos = gitHubService.getUserRepositoriesInOrganization(token, orgName, username);
+
+            // FE/BE 레포지토리 우선 선택 (타임아웃 방지)
+            List<GitHubRepository> repos = selectPrimaryRepositories(allRepos, 2);
 
             int totalCommits = 0;
             int userCommits = 0;
@@ -397,6 +401,44 @@ public class TallyLambdaHandler implements RequestHandler<APIGatewayProxyRequest
         response.setHeaders(getCorsHeaders());
         response.setBody(body);
         return response;
+    }
+
+    /**
+     * FE/BE 레포지토리 우선 선택
+     */
+    private List<GitHubRepository> selectPrimaryRepositories(List<GitHubRepository> repos, int limit) {
+        if (repos.size() <= limit) {
+            return repos;
+        }
+
+        List<GitHubRepository> priorityRepos = new ArrayList<>();
+        List<String> keywords = Arrays.asList("FE", "BE", "Frontend", "Backend", "Front", "Back", "Client", "Server");
+
+        // FE/BE 키워드를 포함하는 레포지토리 우선
+        for (GitHubRepository repo : repos) {
+            String name = repo.getName().toUpperCase();
+            for (String keyword : keywords) {
+                if (name.contains(keyword.toUpperCase())) {
+                    priorityRepos.add(repo);
+                    break;
+                }
+            }
+            if (priorityRepos.size() >= limit) {
+                return priorityRepos;
+            }
+        }
+
+        // 부족하면 나머지 레포지토리 추가
+        for (GitHubRepository repo : repos) {
+            if (!priorityRepos.contains(repo)) {
+                priorityRepos.add(repo);
+                if (priorityRepos.size() >= limit) {
+                    break;
+                }
+            }
+        }
+
+        return priorityRepos;
     }
 
     private Map<String, String> getCorsHeaders() {

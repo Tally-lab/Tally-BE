@@ -213,6 +213,40 @@ public class GitHubService {
     /**
      * 레포지토리의 모든 브랜치 목록 조회
      */
+    /**
+     * 주요 브랜치 선택 (main, master, develop 우선)
+     */
+    private List<String> selectPrimaryBranches(List<String> branches, int limit) {
+        if (branches.size() <= limit) {
+            return branches;
+        }
+
+        List<String> primaryBranches = new ArrayList<>();
+        List<String> primaryNames = Arrays.asList("main", "master", "develop", "dev", "production", "prod");
+
+        // 주요 브랜치 먼저 추가
+        for (String name : primaryNames) {
+            if (branches.contains(name)) {
+                primaryBranches.add(name);
+                if (primaryBranches.size() >= limit) {
+                    return primaryBranches;
+                }
+            }
+        }
+
+        // 주요 브랜치가 limit보다 적으면 나머지 브랜치 추가
+        for (String branch : branches) {
+            if (!primaryBranches.contains(branch)) {
+                primaryBranches.add(branch);
+                if (primaryBranches.size() >= limit) {
+                    break;
+                }
+            }
+        }
+
+        return primaryBranches;
+    }
+
     public List<String> getRepositoryBranches(String token, String owner, String repo) {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "token " + token);
@@ -260,10 +294,8 @@ public class GitHubService {
         Set<String> seenShas = new HashSet<>();
         List<Commit> allCommits = new ArrayList<>();
 
-        // 브랜치가 너무 많으면 주요 브랜치만 (성능 고려)
-        List<String> targetBranches = branches.size() > 10
-            ? branches.stream().limit(10).collect(Collectors.toList())
-            : branches;
+        // 브랜치가 너무 많으면 주요 브랜치만 (성능 고려 - API Gateway 타임아웃 29초)
+        List<String> targetBranches = selectPrimaryBranches(branches, 2);
 
         for (String branch : targetBranches) {
             String url = String.format("https://api.github.com/repos/%s/%s/commits?sha=%s&per_page=100",
