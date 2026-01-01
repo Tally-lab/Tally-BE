@@ -2,18 +2,16 @@ package com.tally.service;
 
 import com.tally.domain.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
+@Service
 public class ContributionAnalysisService {
     private final GitHubService gitHubService;
-
-    public ContributionAnalysisService() {
-        this.gitHubService = new GitHubService();
-    }
 
     public ContributionAnalysisService(GitHubService gitHubService) {
         this.gitHubService = gitHubService;

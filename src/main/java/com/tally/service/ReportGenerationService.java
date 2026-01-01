@@ -2,6 +2,7 @@ package com.tally.service;
 
 import com.tally.domain.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -11,24 +12,31 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
+@Service
 public class ReportGenerationService {
     private final ContributionAnalysisService analysisService;
-
-    public ReportGenerationService() {
-        this.analysisService = new ContributionAnalysisService();
-    }
 
     public ReportGenerationService(ContributionAnalysisService analysisService) {
         this.analysisService = analysisService;
     }
 
     /**
-     * Markdown 리포트 생성
+     * Markdown 리포트 생성 (기존 방식 - GitHub API 호출)
      */
     public Report generateMarkdownReport(String token, String owner, String repo, String username) {
         ContributionStats stats = analysisService.analyzeContribution(token, owner, repo, username);
-        List<PullRequest> userPRs = analysisService.getUserPullRequests(token, owner, repo, username);
-        List<Issue> userIssues = analysisService.getUserIssues(token, owner, repo, username);
+        return generateMarkdownReportFromStats(stats);
+    }
+
+    /**
+     * Markdown 리포트 생성 (stats 직접 전달 - 빠름)
+     */
+    public Report generateMarkdownReportFromStats(ContributionStats stats) {
+        List<PullRequest> userPRs = stats.getPullRequests() != null ? stats.getPullRequests() : List.of();
+        List<Issue> userIssues = stats.getIssues() != null ? stats.getIssues() : List.of();
+        String[] repoParts = stats.getRepositoryFullName().split("/");
+        String repo = repoParts.length > 1 ? repoParts[1] : stats.getRepositoryFullName();
+        String username = stats.getUsername();
 
         StringBuilder markdown = new StringBuilder();
 
@@ -106,12 +114,22 @@ public class ReportGenerationService {
     }
 
     /**
-     * HTML 리포트 생성
+     * HTML 리포트 생성 (기존 방식 - GitHub API 호출)
      */
     public Report generateHtmlReport(String token, String owner, String repo, String username) {
         ContributionStats stats = analysisService.analyzeContribution(token, owner, repo, username);
-        List<PullRequest> userPRs = analysisService.getUserPullRequests(token, owner, repo, username);
-        List<Issue> userIssues = analysisService.getUserIssues(token, owner, repo, username);
+        return generateHtmlReportFromStats(stats);
+    }
+
+    /**
+     * HTML 리포트 생성 (stats 직접 전달 - 빠름)
+     */
+    public Report generateHtmlReportFromStats(ContributionStats stats) {
+        List<PullRequest> userPRs = stats.getPullRequests() != null ? stats.getPullRequests() : List.of();
+        List<Issue> userIssues = stats.getIssues() != null ? stats.getIssues() : List.of();
+        String[] repoParts = stats.getRepositoryFullName().split("/");
+        String repo = repoParts.length > 1 ? repoParts[1] : stats.getRepositoryFullName();
+        String username = stats.getUsername();
 
         StringBuilder html = new StringBuilder();
 
