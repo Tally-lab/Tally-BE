@@ -32,8 +32,15 @@ Resources:
           GITHUB_REDIRECT_URI: !Ref GitHubRedirectUri
           FRONTEND_URL: !Ref FrontendUrl
           BEDROCK_REGION: "us-east-1"
+          DYNAMODB_REGION: !Ref AWS::Region
+          CACHE_TABLE_NAME: !Ref CacheTable
+          CACHE_ENABLED: "true"
+          CACHE_TTL_HOURS: "24"
 
       Policies:
+        # DynamoDB 캐시 접근 권한
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
         # Bedrock 접근 권한
         - Statement:
             - Effect: Allow
@@ -61,6 +68,70 @@ Resources:
           Properties:
             Path: /{proxy+}
             Method: ANY
+
+  # Streaming Analysis Lambda (Function URL with Response Streaming)
+  TallyStreamingAnalyzer:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: tally-streaming-analyzer
+      Handler: com.tally.lambda.StreamingAnalysisHandler::handleRequest
+      CodeUri: .
+      Description: Tally Streaming Analysis - Real-time progress updates via SSE
+      Timeout: 900  # 15분 (대규모 조직 분석용)
+      MemorySize: 2048
+
+      Environment:
+        Variables:
+          GITHUB_CLIENT_ID: !Ref GitHubClientId
+          GITHUB_CLIENT_SECRET: !Ref GitHubClientSecret
+
+      # Function URL with Response Streaming
+      FunctionUrlConfig:
+        AuthType: NONE
+        InvokeMode: RESPONSE_STREAM
+        Cors:
+          AllowOrigins:
+            - "*"
+          AllowMethods:
+            - GET
+            - POST
+          AllowHeaders:
+            - Authorization
+            - Content-Type
+
+  # DynamoDB Cache Table
+  CacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: tally-analysis-cache
+      BillingMode: PAY_PER_REQUEST  # On-Demand (비용 효율적)
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: analysisType
+          AttributeType: S
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH  # Partition Key
+        - AttributeName: analysisType
+          KeyType: RANGE  # Sort Key
+      GlobalSecondaryIndexes:
+        - IndexName: username-index
+          KeySchema:
+            - AttributeName: username
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        Enabled: true
+        AttributeName: ttl
+      Tags:
+        - Key: Project
+          Value: Tally
+        - Key: Purpose
+          Value: Cache
 
 Parameters:
   GitHubClientId:
@@ -96,3 +167,11 @@ Outputs:
   AuthCallbackUrl:
     Description: "GitHub OAuth Callback URL (set this in GitHub OAuth App settings)"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/auth/callback"
+
+  StreamingAnalyzerUrl:
+    Description: "Streaming Analysis Function URL (SSE endpoint)"
+    Value: !GetAtt TallyStreamingAnalyzerUrl.FunctionUrl
+
+  CacheTableName:
+    Description: "DynamoDB Cache Table Name"
+    Value: !Ref CacheTable

@@ -2,6 +2,7 @@ package com.tally.service;
 
 import com.tally.domain.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -12,6 +13,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
+@Service
 public class GitHubService {
     private final RestTemplate restTemplate = new RestTemplate();
 

@@ -2,6 +2,7 @@ package com.tally.service;
 
 import com.tally.domain.ContributionStats;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.regions.Region;
@@ -20,6 +21,7 @@ import java.util.stream.Collectors;
  * AI 분석 서비스 - AWS Bedrock Claude를 사용한 기여도 요약
  */
 @Slf4j
+@Service
 public class AIAnalysisService {
 
     private final BedrockRuntimeClient bedrockClient;

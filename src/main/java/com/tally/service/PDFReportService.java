@@ -7,6 +7,7 @@ import com.tally.domain.ContributionStats.RoleStats;
 import com.tally.domain.PullRequest;
 import com.tally.domain.Issue;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
@@ -19,6 +20,7 @@ import java.util.Map;
  * PDF 리포트 생성 서비스
  */
 @Slf4j
+@Service
 public class PDFReportService {
 
     // 색상 정의

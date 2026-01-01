@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.tally.domain.*;
 import com.tally.service.*;
+import com.tally.service.GraphQLGitHubService.RepositoryData;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,6 +29,8 @@ public class TallyLambdaHandler implements RequestHandler<APIGatewayProxyRequest
     private final ReportGenerationService reportService;
     private final AIAnalysisService aiService;
     private final PDFReportService pdfService;
+    private final QualityAnalysisService qualityAnalysisService;
+    private final GraphQLGitHubService graphQLGitHubService;
 
     public TallyLambdaHandler() {
         this.objectMapper = new ObjectMapper();
@@ -35,10 +38,13 @@ public class TallyLambdaHandler implements RequestHandler<APIGatewayProxyRequest
 
         this.gitHubService = new GitHubService();
         this.authService = new AuthService();
+        GitHubGraphQLClient graphQLClient = new GitHubGraphQLClient();
+        this.graphQLGitHubService = new GraphQLGitHubService(graphQLClient);
         this.analysisService = new ContributionAnalysisService(gitHubService);
         this.reportService = new ReportGenerationService(analysisService);
         this.aiService = new AIAnalysisService();
         this.pdfService = new PDFReportService();
+        this.qualityAnalysisService = new QualityAnalysisService();
     }
 
     @Override
@@ -281,12 +287,47 @@ public class TallyLambdaHandler implements RequestHandler<APIGatewayProxyRequest
             return buildSuccessResponse(stats);
         }
 
+        // GET /analysis/quality/commits/{owner}/{repo}
+        if (path.matches("/analysis/quality/commits/[^/]+/[^/]+") && "GET".equals(method)) {
+            String[] parts = path.split("/");
+            String owner = parts[4];
+            String repo = parts[5];
+
+            context.getLogger().log("Analyzing commit quality for " + owner + "/" + repo + " using GraphQL");
+
+            // GraphQL로 레포지토리 데이터 가져오기
+            RepositoryData repoData = graphQLGitHubService.getRepositoryAnalysis(token, owner, repo);
+            List<Commit> commits = repoData.getCommits();
+
+            // 커밋 품질 분석
+            CommitQualityMetrics metrics = qualityAnalysisService.analyzeCommitQuality(commits);
+            return buildSuccessResponse(metrics);
+        }
+
+        // GET /analysis/quality/prs/{owner}/{repo}
+        if (path.matches("/analysis/quality/prs/[^/]+/[^/]+") && "GET".equals(method)) {
+            String[] parts = path.split("/");
+            String owner = parts[4];
+            String repo = parts[5];
+
+            context.getLogger().log("Analyzing PR quality for " + owner + "/" + repo + " using GraphQL");
+
+            // GraphQL로 레포지토리 데이터 가져오기
+            RepositoryData repoData = graphQLGitHubService.getRepositoryAnalysis(token, owner, repo);
+            List<PullRequest> prs = repoData.getPullRequests();
+
+            // PR 품질 분석
+            PRQualityMetrics metrics = qualityAnalysisService.analyzePRQuality(prs);
+            return buildSuccessResponse(metrics);
+        }
+
         // GET /analysis/{owner}/{repo}
         if (path.matches("/analysis/[^/]+/[^/]+") && "GET".equals(method)) {
             String[] parts = path.split("/");
             String owner = parts[2];
             String repo = parts[3];
-            String username = input.getQueryStringParameters().get("username");
+            String username = input.getQueryStringParameters() != null ?
+                input.getQueryStringParameters().get("username") : null;
 
             ContributionStats stats = analysisService.analyzeContribution(token, owner, repo, username);
             return buildSuccessResponse(stats);
@@ -300,10 +341,44 @@ public class TallyLambdaHandler implements RequestHandler<APIGatewayProxyRequest
             String token, APIGatewayProxyRequestEvent input, Context context) throws Exception {
 
         if ("POST".equals(method)) {
-            Map<String, String> body = objectMapper.readValue(input.getBody(), Map.class);
-            String owner = body.get("owner");
-            String repo = body.get("repo");
-            String username = body.get("username");
+            Map<String, Object> body = objectMapper.readValue(input.getBody(), Map.class);
+
+            // 새로운 방식: stats를 직접 전달받아 빠르게 생성
+            if (path.equals("/reports/markdown/generate")) {
+                Object statsObj = body.get("stats");
+                ContributionStats stats = objectMapper.convertValue(statsObj, ContributionStats.class);
+                context.getLogger().log("Generating Markdown report from stats for " + stats.getRepositoryFullName());
+                Report report = reportService.generateMarkdownReportFromStats(stats);
+                return buildSuccessResponse(Map.of("content", report.getContent()));
+            }
+
+            if (path.equals("/reports/html/generate")) {
+                Object statsObj = body.get("stats");
+                ContributionStats stats = objectMapper.convertValue(statsObj, ContributionStats.class);
+                context.getLogger().log("Generating HTML report from stats for " + stats.getRepositoryFullName());
+                Report report = reportService.generateHtmlReportFromStats(stats);
+                return buildSuccessResponse(Map.of("content", report.getContent()));
+            }
+
+            if (path.equals("/reports/pdf/generate")) {
+                Object statsObj = body.get("stats");
+                ContributionStats stats = objectMapper.convertValue(statsObj, ContributionStats.class);
+                context.getLogger().log("Generating PDF report from stats for " + stats.getRepositoryFullName());
+                String[] repoParts = stats.getRepositoryFullName().split("/");
+                String repoName = repoParts.length > 1 ? repoParts[1] : stats.getRepositoryFullName();
+                String pdfBase64 = pdfService.generateReport(stats);
+                return buildSuccessResponse(Map.of(
+                    "content", pdfBase64,
+                    "filename", repoName + "-contribution-report.pdf",
+                    "contentType", "application/pdf",
+                    "encoding", "base64"
+                ));
+            }
+
+            // 기존 방식: owner/repo/username으로 GitHub API 호출 후 생성
+            String owner = (String) body.get("owner");
+            String repo = (String) body.get("repo");
+            String username = (String) body.get("username");
 
             if (path.equals("/reports/markdown")) {
                 Report report = reportService.generateMarkdownReport(token, owner, repo, username);
@@ -336,6 +411,43 @@ public class TallyLambdaHandler implements RequestHandler<APIGatewayProxyRequest
     private APIGatewayProxyResponseEvent handleAI(String path, String method,
             String token, APIGatewayProxyRequestEvent input, Context context) throws Exception {
 
+        // POST /ai/summary - stats를 받아서 AI 요약만 생성 (빠름)
+        if (path.equals("/ai/summary") && "POST".equals(method)) {
+            Map<String, Object> body = objectMapper.readValue(input.getBody(), Map.class);
+            Object statsObj = body.get("stats");
+
+            // stats를 ContributionStats로 변환
+            ContributionStats stats = objectMapper.convertValue(statsObj, ContributionStats.class);
+
+            context.getLogger().log("AI Summary for " + stats.getRepositoryFullName());
+
+            // AI 요약만 생성 (GitHub API 호출 없음)
+            String aiSummary = aiService.generateSummary(stats);
+
+            return buildSuccessResponse(Map.of("aiSummary", aiSummary));
+        }
+
+        // GET /ai/analyze/{owner}/{repo} (기존 방식 - 느림)
+        if (path.matches("/ai/analyze/[^/]+/[^/]+") && "GET".equals(method)) {
+            String[] parts = path.split("/");
+            String owner = parts[3];
+            String repo = parts[4];
+            String username = input.getQueryStringParameters() != null
+                ? input.getQueryStringParameters().get("username")
+                : null;
+
+            context.getLogger().log("AI Analysis for " + owner + "/" + repo + " user: " + username);
+
+            // 기존 분석 수행
+            ContributionStats stats = analysisService.analyzeContribution(token, owner, repo, username);
+
+            // AI 요약 생성
+            String aiSummary = aiService.generateSummary(stats);
+
+            return buildSuccessResponse(Map.of("aiSummary", aiSummary));
+        }
+
+        // POST /ai/analyze (기존 방식 유지 - 느림)
         if (path.equals("/ai/analyze") && "POST".equals(method)) {
             Map<String, String> body = objectMapper.readValue(input.getBody(), Map.class);
             String owner = body.get("owner");
