@@ -5,12 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tally.domain.User;
 import com.tally.util.JsonFileUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 import org.springframework.http.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 
 @Slf4j
+@Service
 public class AuthService {
 
     // 환경변수에서 읽거나 직접 설정 가능
