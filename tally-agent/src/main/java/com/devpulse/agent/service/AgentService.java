@@ -3,7 +3,9 @@ package com.devpulse.agent.service;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -33,6 +35,7 @@ public class AgentService {
             - When analyzing, start with an overview then drill into specifics.
             - Suggest actionable improvements based on metrics.
             - Compare against industry best practices when relevant.
+            - Use the provided RAG context (industry standards, team documents) to support your analysis.
             - If a tool call fails, explain the error and suggest alternatives.
             - Respond in Korean when the user writes in Korean.
             """;
@@ -40,11 +43,14 @@ public class AgentService {
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
 
-    public AgentService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory) {
+    public AgentService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory, VectorStore vectorStore) {
         this.chatMemory = chatMemory;
         this.chatClient = chatClientBuilder
                 .defaultSystem(BASE_SYSTEM_PROMPT)
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .defaultAdvisors(
+                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
+                        QuestionAnswerAdvisor.builder(vectorStore).build()
+                )
                 .build();
     }
 
