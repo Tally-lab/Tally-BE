@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: tally-agent
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      chat:
+        options:
+          model: claude-sonnet-4-20250514
+          max-tokens: 4096
+    mcp:
+      client:
+        sse:
+          connections:
+            github-mcp:
+              url: http://localhost:8081
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.devpulse: DEBUG
