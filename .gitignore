@@ -43,7 +43,9 @@ out/
 application-local.yml
 data/
 
-### AWS SAM ###
+### Docker ###
+.env
+
+### AWS SAM (legacy) ###
 .aws-sam/
 samconfig.toml
-.env

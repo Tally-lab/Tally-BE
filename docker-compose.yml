@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  tally-agent:
+    build:
+      context: ./tally-agent
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_GITHUB-MCP_URL=http://tally-mcp-github:8081
+    depends_on:
+      - tally-mcp-github
+
+  tally-mcp-github:
+    build:
+      context: ./tally-mcp-github
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+
+  tally-mcp-k8s:
+    build:
+      context: ./tally-mcp-k8s
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    profiles:
+      - full
+
+  tally-mcp-monitor:
+    build:
+      context: ./tally-mcp-monitor
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+    profiles:
+      - full

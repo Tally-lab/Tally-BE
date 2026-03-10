@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: tally-mcp-monitor
+  ai:
+    mcp:
+      server:
+        name: tally-mcp-monitor
+        version: 3.0.0
+
+server:
+  port: 8083
+
+logging:
+  level:
+    com.devpulse: DEBUG

@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: tally-mcp-github
+  ai:
+    mcp:
+      server:
+        name: tally-mcp-github
+        version: 3.0.0
+
+server:
+  port: 8081
+
+logging:
+  level:
+    com.devpulse: DEBUG
+
+github:
+  graphql-endpoint: https://api.github.com/graphql
