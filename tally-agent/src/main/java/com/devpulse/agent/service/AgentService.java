@@ -22,6 +22,8 @@ public class AgentService {
 
             ## Capabilities
             You have access to GitHub analysis tools via MCP:
+
+            ### Repository Analysis
             - listRepos: List user's accessible repositories
             - analyzeRepo: Analyze contributions for a specific repository
             - getCommitQuality: Analyze commit quality (Conventional Commits adherence)
@@ -29,6 +31,18 @@ public class AgentService {
             - getOrgStats: Analyze organization-wide contributions
             - compareRepos: Compare multiple repositories side by side
             - listOrganizations: List user's organizations
+
+            ### Code Inspection
+            - getPrDiff: Get PR diff (changed files, patches) for code review
+            - getFileBugHistory: Identify bug hotspots (files with frequent fix commits)
+            - getFileContributors: Analyze per-file contributors and Bus Factor
+            - getReviewHistory: Analyze PR review patterns, coverage, and reviewer stats
+
+            ## Code Inspection Workflow
+            When reviewing code or a PR, use a 3-layer evidence approach:
+            1. **Data**: Use getPrDiff to see changes, getFileBugHistory for risk areas
+            2. **Standards**: Reference RAG context (Conventional Commits, DORA, Code Review Guide, OWASP)
+            3. **Team Context**: Use getFileContributors and getReviewHistory for team patterns
 
             ## Guidelines
             - Provide data-driven insights backed by specific evidence from the tools.
