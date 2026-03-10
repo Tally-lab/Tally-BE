@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devpulse-config
+  namespace: devpulse
+data:
+  # tally-agent
+  SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_GITHUB-MCP_URL: "http://tally-mcp-github:8081"
+  SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_K8S-MCP_URL: "http://tally-mcp-k8s:8082"
+  SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_MONITOR-MCP_URL: "http://tally-mcp-monitor:8083"
+  # tally-mcp-monitor (서비스 URL은 K8s 내부 DNS)
+  MONITOR_SERVICES_0_NAME: "tally-agent"
+  MONITOR_SERVICES_0_URL: "http://tally-agent:8080"
+  MONITOR_SERVICES_1_NAME: "tally-mcp-github"
+  MONITOR_SERVICES_1_URL: "http://tally-mcp-github:8081"
+  MONITOR_SERVICES_2_NAME: "tally-mcp-k8s"
+  MONITOR_SERVICES_2_URL: "http://tally-mcp-k8s:8082"
