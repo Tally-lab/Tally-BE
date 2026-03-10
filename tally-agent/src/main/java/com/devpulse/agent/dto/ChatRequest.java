@@ -12,4 +12,6 @@ public class ChatRequest {
     private String githubToken;
 
     private String conversationId;
+
+    private String selectedOrg;
 }

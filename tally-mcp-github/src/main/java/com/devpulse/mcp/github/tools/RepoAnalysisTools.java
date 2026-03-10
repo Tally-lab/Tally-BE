@@ -34,14 +34,19 @@ public class RepoAnalysisTools {
     public String listRepos(
             @ToolParam(description = "GitHub 액세스 토큰") String token) {
         log.info("Tool: list_repos");
-        List<GitHubRepository> repos = graphQLService.getUserRepositories(token);
+        try {
+            List<GitHubRepository> repos = graphQLService.getUserRepositories(token);
 
-        return repos.stream()
-                .map(r -> String.format("- %s (%s) %s",
-                        r.getFullName(),
-                        r.getIsPrivate() ? "private" : "public",
-                        r.getDescription() != null ? r.getDescription() : ""))
-                .collect(Collectors.joining("\n"));
+            return repos.stream()
+                    .map(r -> String.format("- %s (%s) %s",
+                            r.getFullName(),
+                            r.getIsPrivate() ? "private" : "public",
+                            r.getDescription() != null ? r.getDescription() : ""))
+                    .collect(Collectors.joining("\n"));
+        } catch (Exception e) {
+            log.error("Tool: list_repos failed", e);
+            return "Error: 레포지토리 목록 조회 실패 — " + e.getMessage();
+        }
     }
 
     @Tool(description = "특정 레포지토리의 기여도를 분석합니다. 커밋 수, 기여 비율, PR, Issue, 역할 분석 결과를 반환합니다.")
@@ -51,33 +56,38 @@ public class RepoAnalysisTools {
             @ToolParam(description = "레포지토리 이름 (예: Tally-BE)") String repo,
             @ToolParam(description = "분석 대상 GitHub 사용자명") String username) {
         log.info("Tool: analyze_repo {}/{} for {}", owner, repo, username);
-        ContributionStats stats = contributionService.analyzeContribution(token, owner, repo, username);
+        try {
+            ContributionStats stats = contributionService.analyzeContribution(token, owner, repo, username);
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("## %s/%s 기여도 분석 — %s\n\n", owner, repo, username));
-        sb.append(String.format("- 총 커밋: %d개\n", stats.getTotalCommits()));
-        sb.append(String.format("- 내 커밋: %d개 (%.1f%%)\n", stats.getUserCommits(), stats.getCommitPercentage()));
-        sb.append(String.format("- 활동 기간: %s ~ %s\n", stats.getFirstCommitDate(), stats.getLastCommitDate()));
-        sb.append(String.format("- PR: %d개\n", stats.getPullRequests() != null ? stats.getPullRequests().size() : 0));
-        sb.append(String.format("- Issue: %d개\n", stats.getIssues() != null ? stats.getIssues().size() : 0));
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("## %s/%s 기여도 분석 — %s\n\n", owner, repo, username));
+            sb.append(String.format("- 총 커밋: %d개\n", stats.getTotalCommits()));
+            sb.append(String.format("- 내 커밋: %d개 (%.1f%%)\n", stats.getUserCommits(), stats.getCommitPercentage()));
+            sb.append(String.format("- 활동 기간: %s ~ %s\n", stats.getFirstCommitDate(), stats.getLastCommitDate()));
+            sb.append(String.format("- PR: %d개\n", stats.getPullRequests() != null ? stats.getPullRequests().size() : 0));
+            sb.append(String.format("- Issue: %d개\n", stats.getIssues() != null ? stats.getIssues().size() : 0));
 
-        if (stats.getRoleDistribution() != null && !stats.getRoleDistribution().isEmpty()) {
-            sb.append("\n### 역할 분포\n");
-            stats.getRoleDistribution().entrySet().stream()
-                    .sorted((a, b) -> Double.compare(b.getValue().getPercentage(), a.getValue().getPercentage()))
-                    .forEach(e -> sb.append(String.format("- %s: %.1f%% (%d커밋)\n",
-                            e.getKey(), e.getValue().getPercentage(), e.getValue().getCommitCount())));
+            if (stats.getRoleDistribution() != null && !stats.getRoleDistribution().isEmpty()) {
+                sb.append("\n### 역할 분포\n");
+                stats.getRoleDistribution().entrySet().stream()
+                        .sorted((a, b) -> Double.compare(b.getValue().getPercentage(), a.getValue().getPercentage()))
+                        .forEach(e -> sb.append(String.format("- %s: %.1f%% (%d커밋)\n",
+                                e.getKey(), e.getValue().getPercentage(), e.getValue().getCommitCount())));
+            }
+
+            if (stats.getLanguageDistribution() != null && !stats.getLanguageDistribution().isEmpty()) {
+                sb.append("\n### 언어 분포\n");
+                stats.getLanguageDistribution().entrySet().stream()
+                        .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
+                        .limit(5)
+                        .forEach(e -> sb.append(String.format("- %s: %,d bytes\n", e.getKey(), e.getValue())));
+            }
+
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("Tool: analyze_repo {}/{} failed", owner, repo, e);
+            return String.format("Error: %s/%s 기여도 분석 실패 — %s", owner, repo, e.getMessage());
         }
-
-        if (stats.getLanguageDistribution() != null && !stats.getLanguageDistribution().isEmpty()) {
-            sb.append("\n### 언어 분포\n");
-            stats.getLanguageDistribution().entrySet().stream()
-                    .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
-                    .limit(5)
-                    .forEach(e -> sb.append(String.format("- %s: %,d bytes\n", e.getKey(), e.getValue())));
-        }
-
-        return sb.toString();
     }
 
     @Tool(description = "레포지토리의 커밋 품질을 분석합니다. Conventional Commits 준수율, 커밋 타입 분포, 품질 등급(A-F)을 반환합니다.")
@@ -86,25 +96,29 @@ public class RepoAnalysisTools {
             @ToolParam(description = "레포지토리 소유자") String owner,
             @ToolParam(description = "레포지토리 이름") String repo) {
         log.info("Tool: get_commit_quality {}/{}", owner, repo);
+        try {
+            GraphQLGitHubService.RepositoryData repoData = graphQLService.getRepositoryAnalysis(token, owner, repo);
+            CommitQualityMetrics metrics = qualityService.analyzeCommitQuality(repoData.getCommits());
 
-        GraphQLGitHubService.RepositoryData repoData = graphQLService.getRepositoryAnalysis(token, owner, repo);
-        CommitQualityMetrics metrics = qualityService.analyzeCommitQuality(repoData.getCommits());
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("## %s/%s 커밋 품질 분석\n\n", owner, repo));
+            sb.append(String.format("- 품질 등급: **%s**\n", metrics.getQualityGrade()));
+            sb.append(String.format("- 총 커밋: %d개\n", metrics.getTotalCommits()));
+            sb.append(String.format("- Conventional Commits 준수: %d/%d (%.1f%%)\n",
+                    metrics.getConventionalCommits(), metrics.getTotalCommits(), metrics.getConventionalCommitRate()));
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("## %s/%s 커밋 품질 분석\n\n", owner, repo));
-        sb.append(String.format("- 품질 등급: **%s**\n", metrics.getQualityGrade()));
-        sb.append(String.format("- 총 커밋: %d개\n", metrics.getTotalCommits()));
-        sb.append(String.format("- Conventional Commits 준수: %d/%d (%.1f%%)\n",
-                metrics.getConventionalCommits(), metrics.getTotalCommits(), metrics.getConventionalCommitRate()));
+            if (metrics.getCommitTypeDistribution() != null && !metrics.getCommitTypeDistribution().isEmpty()) {
+                sb.append("\n### 커밋 타입 분포\n");
+                metrics.getCommitTypeDistribution().entrySet().stream()
+                        .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
+                        .forEach(e -> sb.append(String.format("- %s: %d개\n", e.getKey(), e.getValue())));
+            }
 
-        if (metrics.getCommitTypeDistribution() != null && !metrics.getCommitTypeDistribution().isEmpty()) {
-            sb.append("\n### 커밋 타입 분포\n");
-            metrics.getCommitTypeDistribution().entrySet().stream()
-                    .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
-                    .forEach(e -> sb.append(String.format("- %s: %d개\n", e.getKey(), e.getValue())));
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("Tool: get_commit_quality {}/{} failed", owner, repo, e);
+            return String.format("Error: %s/%s 커밋 품질 분석 실패 — %s", owner, repo, e.getMessage());
         }
-
-        return sb.toString();
     }
 
     @Tool(description = "레포지토리의 PR 품질을 분석합니다. 머지율, 평균 리뷰 시간, 품질 등급(A-F)을 반환합니다.")
@@ -113,20 +127,24 @@ public class RepoAnalysisTools {
             @ToolParam(description = "레포지토리 소유자") String owner,
             @ToolParam(description = "레포지토리 이름") String repo) {
         log.info("Tool: get_pr_quality {}/{}", owner, repo);
+        try {
+            GraphQLGitHubService.RepositoryData repoData = graphQLService.getRepositoryAnalysis(token, owner, repo);
+            PRQualityMetrics metrics = qualityService.analyzePRQuality(repoData.getPullRequests());
 
-        GraphQLGitHubService.RepositoryData repoData = graphQLService.getRepositoryAnalysis(token, owner, repo);
-        PRQualityMetrics metrics = qualityService.analyzePRQuality(repoData.getPullRequests());
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("## %s/%s PR 품질 분석\n\n", owner, repo));
+            sb.append(String.format("- 품질 등급: **%s**\n", metrics.getQualityGrade()));
+            sb.append(String.format("- 총 PR: %d개\n", metrics.getTotalPRs()));
+            sb.append(String.format("- 머지율: %.1f%% (%d merged / %d closed / %d open)\n",
+                    metrics.getMergeRate(), metrics.getMergedPRs(),
+                    metrics.getClosedWithoutMergePRs(), metrics.getOpenPRs()));
+            sb.append(String.format("- 평균 리뷰 시간: %.1f시간\n", metrics.getAverageReviewTimeHours()));
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("## %s/%s PR 품질 분석\n\n", owner, repo));
-        sb.append(String.format("- 품질 등급: **%s**\n", metrics.getQualityGrade()));
-        sb.append(String.format("- 총 PR: %d개\n", metrics.getTotalPRs()));
-        sb.append(String.format("- 머지율: %.1f%% (%d merged / %d closed / %d open)\n",
-                metrics.getMergeRate(), metrics.getMergedPRs(),
-                metrics.getClosedWithoutMergePRs(), metrics.getOpenPRs()));
-        sb.append(String.format("- 평균 리뷰 시간: %.1f시간\n", metrics.getAverageReviewTimeHours()));
-
-        return sb.toString();
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("Tool: get_pr_quality {}/{} failed", owner, repo, e);
+            return String.format("Error: %s/%s PR 품질 분석 실패 — %s", owner, repo, e.getMessage());
+        }
     }
 
     @Tool(description = "조직(Organization)의 전체 레포지토리 기여도를 분석합니다. 팀원별 기여도, 레포별 통계를 반환합니다.")
@@ -135,31 +153,35 @@ public class RepoAnalysisTools {
             @ToolParam(description = "조직 이름 (예: Tally-lab)") String orgName,
             @ToolParam(description = "분석 대상 사용자명") String username) {
         log.info("Tool: get_org_stats {} for {}", orgName, username);
+        try {
+            OrganizationStats stats = contributionService.analyzeOrganization(token, orgName, username);
 
-        OrganizationStats stats = contributionService.analyzeOrganization(token, orgName, username);
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("## %s 조직 분석 — %s\n\n", orgName, username));
+            sb.append(String.format("- 레포지토리: %d개\n", stats.getTotalRepositories()));
+            sb.append(String.format("- 총 커밋: %d개 / 내 커밋: %d개 (%.1f%%)\n",
+                    stats.getTotalCommits(), stats.getUserCommits(), stats.getContributionPercentage()));
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("## %s 조직 분석 — %s\n\n", orgName, username));
-        sb.append(String.format("- 레포지토리: %d개\n", stats.getTotalRepositories()));
-        sb.append(String.format("- 총 커밋: %d개 / 내 커밋: %d개 (%.1f%%)\n",
-                stats.getTotalCommits(), stats.getUserCommits(), stats.getContributionPercentage()));
+            if (stats.getRepositories() != null && !stats.getRepositories().isEmpty()) {
+                sb.append("\n### 레포별 기여도\n");
+                stats.getRepositories().stream()
+                        .sorted((a, b) -> Integer.compare(b.getUserCommits(), a.getUserCommits()))
+                        .forEach(r -> sb.append(String.format("- %s: %d/%d (%.1f%%)\n",
+                                r.getName(), r.getUserCommits(), r.getTotalCommits(), r.getContributionPercentage())));
+            }
 
-        if (stats.getRepositories() != null && !stats.getRepositories().isEmpty()) {
-            sb.append("\n### 레포별 기여도\n");
-            stats.getRepositories().stream()
-                    .sorted((a, b) -> Integer.compare(b.getUserCommits(), a.getUserCommits()))
-                    .forEach(r -> sb.append(String.format("- %s: %d/%d (%.1f%%)\n",
-                            r.getName(), r.getUserCommits(), r.getTotalCommits(), r.getContributionPercentage())));
+            if (stats.getTeamMembers() != null && !stats.getTeamMembers().isEmpty()) {
+                sb.append("\n### 팀원별 기여도 (상위 10명)\n");
+                stats.getTeamMembers().stream().limit(10)
+                        .forEach(m -> sb.append(String.format("- %s: %d커밋 (%.1f%%)\n",
+                                m.getLogin(), m.getCommits(), m.getContributionPercentage())));
+            }
+
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("Tool: get_org_stats {} failed", orgName, e);
+            return String.format("Error: %s 조직 분석 실패 — %s", orgName, e.getMessage());
         }
-
-        if (stats.getTeamMembers() != null && !stats.getTeamMembers().isEmpty()) {
-            sb.append("\n### 팀원별 기여도 (상위 10명)\n");
-            stats.getTeamMembers().stream().limit(10)
-                    .forEach(m -> sb.append(String.format("- %s: %d커밋 (%.1f%%)\n",
-                            m.getLogin(), m.getCommits(), m.getContributionPercentage())));
-        }
-
-        return sb.toString();
     }
 
     @Tool(description = "두 개 이상의 레포지토리를 비교 분석합니다. 각 레포의 기여도, 커밋 품질, PR 품질을 나란히 비교합니다.")
@@ -168,7 +190,7 @@ public class RepoAnalysisTools {
             @ToolParam(description = "비교할 레포 목록 (owner/repo 형식, 쉼표 구분)") String repoList,
             @ToolParam(description = "분석 대상 사용자명") String username) {
         log.info("Tool: compare_repos [{}] for {}", repoList, username);
-
+        try {
         String[] repos = repoList.split(",");
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("## 레포지토리 비교 분석 — %s\n\n", username));
@@ -207,19 +229,50 @@ public class RepoAnalysisTools {
         sb.append("\n");
 
         return sb.toString();
+        } catch (Exception e) {
+            log.error("Tool: compare_repos failed", e);
+            return "Error: 레포지토리 비교 분석 실패 — " + e.getMessage();
+        }
     }
 
     @Tool(description = "사용자의 조직 목록을 조회합니다.")
     public String listOrganizations(
             @ToolParam(description = "GitHub 액세스 토큰") String token) {
         log.info("Tool: list_organizations");
-        List<Organization> orgs = graphQLService.getUserOrganizations(token);
+        try {
+            List<Organization> orgs = graphQLService.getUserOrganizations(token);
 
-        if (orgs.isEmpty()) return "소속된 조직이 없습니다.";
+            if (orgs.isEmpty()) return "소속된 조직이 없습니다.";
 
-        return orgs.stream()
-                .map(o -> String.format("- %s%s", o.getLogin(),
-                        o.getDescription() != null ? " — " + o.getDescription() : ""))
-                .collect(Collectors.joining("\n"));
+            return orgs.stream()
+                    .map(o -> String.format("- %s%s", o.getLogin(),
+                            o.getDescription() != null ? " — " + o.getDescription() : ""))
+                    .collect(Collectors.joining("\n"));
+        } catch (Exception e) {
+            log.error("Tool: list_organizations failed", e);
+            return "Error: 조직 목록 조회 실패 — " + e.getMessage();
+        }
+    }
+
+    @Tool(description = "조직(Organization)의 레포지토리 목록을 조회합니다. 조직 내 레포 이름, public/private 여부, 설명을 반환합니다. 조직 단위 분석 전에 먼저 호출하여 레포 목록을 파악합니다.")
+    public String listOrgRepos(
+            @ToolParam(description = "GitHub 액세스 토큰") String token,
+            @ToolParam(description = "조직 이름 (예: FairTicket-Lab)") String orgName) {
+        log.info("Tool: list_org_repos {}", orgName);
+        try {
+            List<GitHubRepository> repos = graphQLService.getOrganizationRepositories(token, orgName);
+
+            if (repos.isEmpty()) return orgName + " 조직에 레포지토리가 없습니다.";
+
+            return repos.stream()
+                    .map(r -> String.format("- %s (%s)%s",
+                            r.getName(),
+                            r.getIsPrivate() ? "private" : "public",
+                            r.getDescription() != null ? " — " + r.getDescription() : ""))
+                    .collect(Collectors.joining("\n"));
+        } catch (Exception e) {
+            log.error("Tool: list_org_repos {} failed", orgName, e);
+            return String.format("Error: %s 조직 레포 조회 실패 — %s", orgName, e.getMessage());
+        }
     }
 }

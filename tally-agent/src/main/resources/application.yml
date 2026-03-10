@@ -18,14 +18,22 @@ spring:
         version: 3.0.0
         request-timeout: 30s
         type: SYNC
+        toolcallback:
+          enabled: true
         sse:
           connections:
             github-mcp:
               url: http://localhost:8081
-            k8s-mcp:
-              url: http://localhost:8082
-            monitor-mcp:
-              url: http://localhost:8083
+#            k8s-mcp:
+#              url: http://localhost:8082
+#            monitor-mcp:
+#              url: http://localhost:8083
+
+github:
+  oauth:
+    client-id: ${GITHUB_OAUTH_CLIENT_ID:}
+    client-secret: ${GITHUB_OAUTH_CLIENT_SECRET:}
+    redirect-uri: ${GITHUB_OAUTH_REDIRECT_URI:http://localhost:5174/auth/callback}
 
 server:
   port: 8080
