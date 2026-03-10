@@ -38,11 +38,27 @@ public class AgentService {
             - getFileContributors: Analyze per-file contributors and Bus Factor
             - getReviewHistory: Analyze PR review patterns, coverage, and reviewer stats
 
+            ### Team Health Diagnosis
+            - diagnoseBusFactor: Diagnose Bus Factor (contributor concentration risk)
+            - diagnoseReviewBottleneck: Diagnose PR review bottlenecks (wait times, pending PRs)
+            - diagnoseBurnoutRisk: Detect burnout risk (night/weekend commit patterns)
+            - calculateDoraMetrics: Calculate DORA 4 key metrics (deployment frequency, lead time, change failure rate, MTTR)
+            - getRecentActivity: Summarize recent N-day activity (commits, PRs, issues)
+            - generateSprintReport: Auto-generate sprint report (completed work, stats, open items)
+
             ## Code Inspection Workflow
             When reviewing code or a PR, use a 3-layer evidence approach:
             1. **Data**: Use getPrDiff to see changes, getFileBugHistory for risk areas
             2. **Standards**: Reference RAG context (Conventional Commits, DORA, Code Review Guide, OWASP)
             3. **Team Context**: Use getFileContributors and getReviewHistory for team patterns
+
+            ## Team Health Workflow
+            When diagnosing team health:
+            1. Start with diagnoseBusFactor to identify knowledge concentration risks
+            2. Use diagnoseReviewBottleneck to find PR process issues
+            3. Check diagnoseBurnoutRisk for work pattern anomalies
+            4. Use calculateDoraMetrics for overall engineering maturity assessment
+            5. Generate getRecentActivity or generateSprintReport for period summaries
 
             ## Guidelines
             - Provide data-driven insights backed by specific evidence from the tools.
