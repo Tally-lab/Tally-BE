@@ -1,0 +1,174 @@
+---
+# tally-agent — MCP Client + OpenAI Orchestrator
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tally-agent
+  namespace: devpulse
+  labels:
+    app: tally-agent
+    app.kubernetes.io/part-of: devpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tally-agent
+  template:
+    metadata:
+      labels:
+        app: tally-agent
+    spec:
+      containers:
+        - name: tally-agent
+          image: devpulse/tally-agent:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: OPEN_AI_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: devpulse-secrets
+                  key: openai-api-key
+          envFrom:
+            - configMapRef:
+                name: devpulse-config
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+
+---
+# tally-mcp-github — GitHub 분석 MCP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tally-mcp-github
+  namespace: devpulse
+  labels:
+    app: tally-mcp-github
+    app.kubernetes.io/part-of: devpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tally-mcp-github
+  template:
+    metadata:
+      labels:
+        app: tally-mcp-github
+    spec:
+      containers:
+        - name: tally-mcp-github
+          image: devpulse/tally-mcp-github:latest
+          ports:
+            - containerPort: 8081
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "300m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            initialDelaySeconds: 20
+            periodSeconds: 10
+
+---
+# tally-mcp-k8s — Kubernetes 관리 MCP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tally-mcp-k8s
+  namespace: devpulse
+  labels:
+    app: tally-mcp-k8s
+    app.kubernetes.io/part-of: devpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tally-mcp-k8s
+  template:
+    metadata:
+      labels:
+        app: tally-mcp-k8s
+    spec:
+      serviceAccountName: devpulse-k8s-sa
+      containers:
+        - name: tally-mcp-k8s
+          image: devpulse/tally-mcp-k8s:latest
+          ports:
+            - containerPort: 8082
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "300m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 20
+            periodSeconds: 10
+
+---
+# tally-mcp-monitor — 서비스 모니터링 MCP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tally-mcp-monitor
+  namespace: devpulse
+  labels:
+    app: tally-mcp-monitor
+    app.kubernetes.io/part-of: devpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tally-mcp-monitor
+  template:
+    metadata:
+      labels:
+        app: tally-mcp-monitor
+    spec:
+      containers:
+        - name: tally-mcp-monitor
+          image: devpulse/tally-mcp-monitor:latest
+          ports:
+            - containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: devpulse-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "300m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            initialDelaySeconds: 20
+            periodSeconds: 10

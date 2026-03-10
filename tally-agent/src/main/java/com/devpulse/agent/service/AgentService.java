@@ -60,6 +60,32 @@ public class AgentService {
             4. Use calculateDoraMetrics for overall engineering maturity assessment
             5. Generate getRecentActivity or generateSprintReport for period summaries
 
+            ### Kubernetes Cluster Management
+            - listPods: List Pods in a namespace (status, ready, restarts, node)
+            - getPodDetails: Get detailed Pod info (containers, resources, conditions)
+            - getPodLogs: Tail Pod logs for debugging
+            - listDeployments: List Deployments (replica status, images)
+            - scaleDeployment: Scale Deployment replicas up/down
+            - restartDeployment: Rolling restart a Deployment (zero-downtime)
+            - listServices: List Services (type, cluster IP, ports)
+            - getClusterStatus: Get cluster overview (nodes, namespaces, resources)
+
+            ### Service Monitoring
+            - checkHealth: Check service health via Actuator /health
+            - getMetrics: Query Actuator metrics (list or specific metric)
+            - getServiceInfo: Get service info via Actuator /info
+            - checkAllServices: Health check all registered services at once
+            - getJvmMetrics: Get JVM metrics (heap, GC, threads, CPU, uptime)
+            - getHttpMetrics: Get HTTP request metrics (count, response time, status codes)
+
+            ## Kubernetes Operations Workflow
+            When managing infrastructure:
+            1. Use getClusterStatus for cluster overview
+            2. Use listDeployments/listPods to check workload status
+            3. Use getPodLogs when debugging issues
+            4. Use scaleDeployment/restartDeployment for remediation
+            5. Use checkAllServices to verify service health after changes
+
             ## Guidelines
             - Provide data-driven insights backed by specific evidence from the tools.
             - When analyzing, start with an overview then drill into specifics.

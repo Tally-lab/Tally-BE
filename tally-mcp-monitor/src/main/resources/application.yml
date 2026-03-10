@@ -6,10 +6,35 @@ spring:
       server:
         name: tally-mcp-monitor
         version: 3.0.0
+        type: SYNC
+        instructions: "서비스 모니터링 도구를 제공하는 MCP Server입니다. Spring Boot Actuator 기반 헬스체크, 메트릭 조회, JVM/HTTP 모니터링 기능을 지원합니다."
+        capabilities:
+          tool: true
+        sse-message-endpoint: /mcp/messages
+
+# 모니터링 대상 서비스 등록
+monitor:
+  services:
+    - name: tally-agent
+      url: http://localhost:8080
+    - name: tally-mcp-github
+      url: http://localhost:8081
+    - name: tally-mcp-k8s
+      url: http://localhost:8082
 
 server:
   port: 8083
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
 logging:
   level:
     com.devpulse: DEBUG
+    org.springframework.ai.mcp: DEBUG

@@ -6,6 +6,11 @@ spring:
       server:
         name: tally-mcp-k8s
         version: 3.0.0
+        type: SYNC
+        instructions: "Kubernetes 클러스터 모니터링 및 제어 도구를 제공하는 MCP Server입니다. Pod, Deployment, Service 조회/스케일링/재시작 기능을 지원합니다."
+        capabilities:
+          tool: true
+        sse-message-endpoint: /mcp/messages
 
 server:
   port: 8082
@@ -13,3 +18,4 @@ server:
 logging:
   level:
     com.devpulse: DEBUG
+    org.springframework.ai.mcp: DEBUG

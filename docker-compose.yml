@@ -10,8 +10,12 @@ services:
     environment:
       - OPEN_AI_KEY=${OPEN_AI_KEY}
       - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_GITHUB-MCP_URL=http://tally-mcp-github:8081
+      - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_K8S-MCP_URL=http://tally-mcp-k8s:8082
+      - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_MONITOR-MCP_URL=http://tally-mcp-monitor:8083
     depends_on:
       - tally-mcp-github
+      - tally-mcp-k8s
+      - tally-mcp-monitor
 
   tally-mcp-github:
     build:
@@ -28,8 +32,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8082:8082"
-    profiles:
-      - full
+    volumes:
+      - ${HOME}/.kube/config:/root/.kube/config:ro
 
   tally-mcp-monitor:
     build:
@@ -37,5 +41,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8083:8083"
-    profiles:
-      - full
+    environment:
+      - MONITOR_SERVICES_0_NAME=tally-agent
+      - MONITOR_SERVICES_0_URL=http://tally-agent:8080
+      - MONITOR_SERVICES_1_NAME=tally-mcp-github
+      - MONITOR_SERVICES_1_URL=http://tally-mcp-github:8081
+      - MONITOR_SERVICES_2_NAME=tally-mcp-k8s
+      - MONITOR_SERVICES_2_URL=http://tally-mcp-k8s:8082
