@@ -3,11 +3,14 @@ spring:
     name: tally-agent
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY:}
+      api-key: ${OPEN_AI_KEY:}
       chat:
         options:
           model: gpt-4o
           max-tokens: 4096
+      embedding:
+        options:
+          model: text-embedding-3-small
     mcp:
       client:
         enabled: true

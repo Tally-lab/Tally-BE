@@ -45,6 +45,8 @@ data/
 
 ### Docker ###
 .env
+key.env
+*.env
 
 ### AWS SAM (legacy) ###
 .aws-sam/
