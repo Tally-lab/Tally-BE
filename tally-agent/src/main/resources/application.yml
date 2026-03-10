@@ -10,6 +10,11 @@ spring:
           max-tokens: 4096
     mcp:
       client:
+        enabled: true
+        name: tally-agent
+        version: 3.0.0
+        request-timeout: 30s
+        type: SYNC
         sse:
           connections:
             github-mcp:
@@ -21,3 +26,4 @@ server:
 logging:
   level:
     com.devpulse: DEBUG
+    org.springframework.ai: DEBUG
