@@ -56,6 +56,20 @@ public class GitHubRestClient {
         return executeGet(token, String.format("/repos/%s/%s/commits?path=%s&per_page=%d", owner, repo, path, perPage));
     }
 
+    /**
+     * 레포지토리 내 특정 파일의 내용 조회 (GitHub Contents API)
+     * 파일이 존재하지 않으면 null 반환
+     */
+    public JsonNode getFileContent(String token, String owner, String repo, String path) {
+        log.debug("REST: GET /repos/{}/{}/contents/{}", owner, repo, path);
+        try {
+            return executeGet(token, String.format("/repos/%s/%s/contents/%s", owner, repo, path));
+        } catch (Exception e) {
+            log.debug("File not found: {}/{}/{}", owner, repo, path);
+            return null;
+        }
+    }
+
     private JsonNode executeGet(String token, String uri) {
         try {
             String response = webClient.get()
