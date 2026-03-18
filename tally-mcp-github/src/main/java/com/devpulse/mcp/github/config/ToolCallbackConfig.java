@@ -3,6 +3,7 @@ package com.devpulse.mcp.github.config;
 import com.devpulse.mcp.github.tools.CodeInspectionTools;
 import com.devpulse.mcp.github.tools.RepoAnalysisTools;
 import com.devpulse.mcp.github.tools.TeamHealthTools;
+import com.devpulse.mcp.github.tools.TechStackTools;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
@@ -23,6 +24,11 @@ public class ToolCallbackConfig {
 
     @Bean
     ToolCallbackProvider teamHealthToolCallbackProvider(TeamHealthTools tools) {
+        return MethodToolCallbackProvider.builder().toolObjects(tools).build();
+    }
+
+    @Bean
+    ToolCallbackProvider techStackToolCallbackProvider(TechStackTools tools) {
         return MethodToolCallbackProvider.builder().toolObjects(tools).build();
     }
 }
