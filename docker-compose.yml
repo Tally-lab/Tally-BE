@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   tally-agent:
     build:
@@ -9,13 +7,18 @@ services:
       - "8080:8080"
     environment:
       - OPEN_AI_KEY=${OPEN_AI_KEY}
+      - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID}
+      - GITHUB_OAUTH_CLIENT_SECRET=${GITHUB_OAUTH_CLIENT_SECRET}
       - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_GITHUB-MCP_URL=http://tally-mcp-github:8081
       - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_K8S-MCP_URL=http://tally-mcp-k8s:8082
       - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_MONITOR-MCP_URL=http://tally-mcp-monitor:8083
     depends_on:
-      - tally-mcp-github
-      - tally-mcp-k8s
-      - tally-mcp-monitor
+      tally-mcp-github:
+        condition: service_healthy
+      tally-mcp-k8s:
+        condition: service_healthy
+      tally-mcp-monitor:
+        condition: service_healthy
 
   tally-mcp-github:
     build:
@@ -25,6 +28,12 @@ services:
       - "8081:8081"
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
 
   tally-mcp-k8s:
     build:
@@ -34,6 +43,12 @@ services:
       - "8082:8082"
     volumes:
       - ${HOME}/.kube/config:/root/.kube/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
 
   tally-mcp-monitor:
     build:
@@ -48,3 +63,9 @@ services:
       - MONITOR_SERVICES_1_URL=http://tally-mcp-github:8081
       - MONITOR_SERVICES_2_NAME=tally-mcp-k8s
       - MONITOR_SERVICES_2_URL=http://tally-mcp-k8s:8082
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s

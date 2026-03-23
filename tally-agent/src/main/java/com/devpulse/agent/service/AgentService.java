@@ -76,15 +76,22 @@ public class AgentService {
 
             MANDATORY WORKFLOW when user mentions an organization (not a specific repo):
             1. FIRST call listOrgRepos to get the list of repositories in that organization
-            2. THEN pick the main repository (prefer -BE over -FE, or the largest one)
-            3. THEN call the analysis tool with owner=orgName AND repo=repoName
-            4. Tell the user which repo you analyzed
+            2. THEN analyze ALL repositories in the organization, not just one
+            3. Call the analysis tool for EACH repo: owner=orgName, repo=eachRepoName
+            4. If a tool call fails for a specific repo, log it and continue with the next repo — do NOT stop
+            5. After analyzing all repos, present a COMBINED summary with per-repo breakdown
+            6. Clearly label each repo's results so the user can see individual and overall status
 
-            Example: User says "Farm-On bus factor 분석해줘"
-            → Step 1: call listOrgRepos(token, "Farm-On") → gets ["FE", "BE"]
-            → Step 2: pick "BE" as main repo
-            → Step 3: call diagnoseBusFactor(token, "Farm-On", "BE")
+            Example: User says "FairTicket-Lab DORA 메트릭 분석해줘"
+            → Step 1: call listOrgRepos(token, "FairTicket-Lab") → gets ["FairTicket-FE", "FairTicket-BE", "FairTicket-Infra"]
+            → Step 2: call calculateDoraMetrics for EACH repo:
+              - calculateDoraMetrics(token, "FairTicket-Lab", "FairTicket-FE")
+              - calculateDoraMetrics(token, "FairTicket-Lab", "FairTicket-BE")
+              - calculateDoraMetrics(token, "FairTicket-Lab", "FairTicket-Infra")
+            → Step 3: combine results into org-wide summary + per-repo details
+            → Step 4: if FairTicket-Infra failed (e.g. empty repo), note it and show results for the others
 
+            IMPORTANT: If a specific repo is mentioned (e.g. "FairTicket-BE 분석해줘"), analyze ONLY that repo.
             If the user's GitHub Context below already lists repos for that org, you may skip listOrgRepos.
 
             ### Kubernetes Cluster Management
