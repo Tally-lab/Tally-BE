@@ -6,6 +6,9 @@ dependencies {
     // Spring AI - MCP Server (WebMVC transport with SSE)
     implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc")
 
+    // Actuator
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+
     // Jackson
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")

@@ -49,12 +49,33 @@ public class GitHubGraphQLClient {
             JsonNode response = objectMapper.readTree(responseBody);
 
             if (response.has("errors")) {
-                log.error("GraphQL errors: {}", response.get("errors"));
-                throw new RuntimeException("GraphQL query failed: " + response.get("errors"));
+                JsonNode errors = response.get("errors");
+                log.error("GraphQL errors: {}", errors);
+
+                String firstMessage = errors.isArray() && errors.size() > 0
+                        ? errors.get(0).path("message").asText("Unknown error")
+                        : errors.toString();
+                String errorType = errors.isArray() && errors.size() > 0
+                        ? errors.get(0).path("type").asText("")
+                        : "";
+
+                if (firstMessage.contains("rate limit") || firstMessage.contains("API rate")) {
+                    throw new RuntimeException("GitHub API rate limit exceeded. Please wait and retry. Detail: " + firstMessage);
+                } else if ("NOT_FOUND".equals(errorType) || firstMessage.contains("Could not resolve")) {
+                    throw new RuntimeException("GitHub resource not found: " + firstMessage);
+                } else if (firstMessage.contains("Field") && firstMessage.contains("doesn't exist")) {
+                    throw new RuntimeException("GraphQL schema error — requested field does not exist: " + firstMessage);
+                } else if ("FORBIDDEN".equals(errorType) || firstMessage.contains("forbidden") || firstMessage.contains("insufficient")) {
+                    throw new RuntimeException("Insufficient permissions for this GitHub resource: " + firstMessage);
+                } else {
+                    throw new RuntimeException("GraphQL query failed: " + firstMessage);
+                }
             }
 
             return response.get("data");
 
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to execute GraphQL query", e);
             throw new RuntimeException("GraphQL execution failed", e);
@@ -91,8 +112,6 @@ public class GitHubGraphQLClient {
                                   avatarUrl
                                 }
                               }
-                              additions
-                              deletions
                             }
                           }
                         }
@@ -181,8 +200,6 @@ public class GitHubGraphQLClient {
                               avatarUrl
                             }
                           }
-                          additions
-                          deletions
                         }
                       }
                     }

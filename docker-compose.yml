@@ -1,46 +1,84 @@
-version: '3.8'
-
 services:
+  # Frontend (Nginx + React)
+  frontend:
+    build:
+      context: ../Tally-FE
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    networks:
+      - app-network
+    depends_on:
+      tally-agent:
+        condition: service_healthy
+
+  # Spring AI Agent (MCP Client)
   tally-agent:
     build:
       context: ./tally-agent
       dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
     environment:
       - OPEN_AI_KEY=${OPEN_AI_KEY}
+      - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID}
+      - GITHUB_OAUTH_CLIENT_SECRET=${GITHUB_OAUTH_CLIENT_SECRET}
+      - GITHUB_OAUTH_REDIRECT_URI=http://localhost:8080/auth/callback
+      - REPORT_FRONTEND_URL=http://localhost:8080
       - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_GITHUB-MCP_URL=http://tally-mcp-github:8081
       - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_K8S-MCP_URL=http://tally-mcp-k8s:8082
       - SPRING_AI_MCP_CLIENT_SSE_CONNECTIONS_MONITOR-MCP_URL=http://tally-mcp-monitor:8083
+    networks:
+      - app-network
     depends_on:
-      - tally-mcp-github
-      - tally-mcp-k8s
-      - tally-mcp-monitor
+      tally-mcp-github:
+        condition: service_healthy
+      tally-mcp-k8s:
+        condition: service_healthy
+      tally-mcp-monitor:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/chat | grep -q '405' || curl -sf http://localhost:8080/ > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
+  # MCP Server - GitHub 분석
   tally-mcp-github:
     build:
       context: ./tally-mcp-github
       dockerfile: Dockerfile
-    ports:
-      - "8081:8081"
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
+  # MCP Server - K8s 관리
   tally-mcp-k8s:
     build:
       context: ./tally-mcp-k8s
       dockerfile: Dockerfile
-    ports:
-      - "8082:8082"
     volumes:
       - ${HOME}/.kube/config:/root/.kube/config:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
+  # MCP Server - 서비스 모니터링
   tally-mcp-monitor:
     build:
       context: ./tally-mcp-monitor
       dockerfile: Dockerfile
-    ports:
-      - "8083:8083"
     environment:
       - MONITOR_SERVICES_0_NAME=tally-agent
       - MONITOR_SERVICES_0_URL=http://tally-agent:8080
@@ -48,3 +86,15 @@ services:
       - MONITOR_SERVICES_1_URL=http://tally-mcp-github:8081
       - MONITOR_SERVICES_2_NAME=tally-mcp-k8s
       - MONITOR_SERVICES_2_URL=http://tally-mcp-k8s:8082
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  app-network:
+    driver: bridge

@@ -33,8 +33,16 @@ public class TeamHealthService {
             throw new RuntimeException("Repository not found: " + owner + "/" + repo);
         }
 
-        JsonNode commitsNode = repoNode.get("defaultBranchRef").get("target").get("history").get("nodes");
-        int totalCommitCount = repoNode.get("defaultBranchRef").get("target").get("history").get("totalCount").asInt();
+        if (!repoNode.has("defaultBranchRef") || repoNode.get("defaultBranchRef").isNull()) {
+            return String.format("## %s/%s Bus Factor 진단\n\n기본 브랜치가 없습니다. 빈 레포지토리이거나 기본 브랜치가 설정되지 않았습니다.", owner, repo);
+        }
+        JsonNode defaultBranchRef = repoNode.get("defaultBranchRef");
+        JsonNode target = defaultBranchRef.get("target");
+        if (target == null || target.isNull() || !target.has("history")) {
+            return String.format("## %s/%s Bus Factor 진단\n\n커밋 히스토리를 가져올 수 없습니다.", owner, repo);
+        }
+        JsonNode commitsNode = target.get("history").get("nodes");
+        int totalCommitCount = target.get("history").get("totalCount").asInt();
 
         // 기여자별 커밋 수 집계
         Map<String, Integer> authorCommits = new LinkedHashMap<>();
@@ -44,8 +52,12 @@ public class TeamHealthService {
         for (JsonNode commit : commitsNode) {
             String author = extractAuthorLogin(commit);
             authorCommits.merge(author, 1, Integer::sum);
-            authorAdditions.merge(author, commit.get("additions").asInt(), Integer::sum);
-            authorDeletions.merge(author, commit.get("deletions").asInt(), Integer::sum);
+            if (commit.has("additions") && !commit.get("additions").isNull()) {
+                authorAdditions.merge(author, commit.get("additions").asInt(), Integer::sum);
+            }
+            if (commit.has("deletions") && !commit.get("deletions").isNull()) {
+                authorDeletions.merge(author, commit.get("deletions").asInt(), Integer::sum);
+            }
         }
 
         int analyzedCommits = 0;
@@ -153,6 +165,7 @@ public class TeamHealthService {
 
             if ("MERGED".equals(state)) {
                 mergedCount++;
+                if (!pr.has("mergedAt") || pr.get("mergedAt").isNull()) continue;
                 String mergedAt = pr.get("mergedAt").asText();
                 try {
                     long mergeHours = ChronoUnit.HOURS.between(
@@ -259,7 +272,14 @@ public class TeamHealthService {
             throw new RuntimeException("Repository not found: " + owner + "/" + repo);
         }
 
-        JsonNode commitsNode = repoNode.get("defaultBranchRef").get("target").get("history").get("nodes");
+        if (!repoNode.has("defaultBranchRef") || repoNode.get("defaultBranchRef").isNull()) {
+            return String.format("## %s/%s 번아웃 위험 분석\n\n기본 브랜치가 없습니다. 빈 레포지토리이거나 기본 브랜치가 설정되지 않았습니다.", owner, repo);
+        }
+        JsonNode branchTarget = repoNode.get("defaultBranchRef").get("target");
+        if (branchTarget == null || branchTarget.isNull() || !branchTarget.has("history")) {
+            return String.format("## %s/%s 번아웃 위험 분석\n\n커밋 히스토리를 가져올 수 없습니다.", owner, repo);
+        }
+        JsonNode commitsNode = branchTarget.get("history").get("nodes");
 
         // 기여자별 커밋 시간대 분석
         Map<String, List<ZonedDateTime>> authorTimestamps = new LinkedHashMap<>();
@@ -367,7 +387,14 @@ public class TeamHealthService {
             throw new RuntimeException("Repository not found: " + owner + "/" + repo);
         }
 
-        JsonNode commitsNode = repoNode.get("defaultBranchRef").get("target").get("history").get("nodes");
+        if (!repoNode.has("defaultBranchRef") || repoNode.get("defaultBranchRef").isNull()) {
+            return String.format("## %s/%s DORA 메트릭\n\n기본 브랜치가 없습니다. 빈 레포지토리이거나 기본 브랜치가 설정되지 않았습니다.", owner, repo);
+        }
+        JsonNode doraTarget = repoNode.get("defaultBranchRef").get("target");
+        if (doraTarget == null || doraTarget.isNull() || !doraTarget.has("history")) {
+            return String.format("## %s/%s DORA 메트릭\n\n커밋 히스토리를 가져올 수 없습니다.", owner, repo);
+        }
+        JsonNode commitsNode = doraTarget.get("history").get("nodes");
         JsonNode prsNode = repoNode.get("pullRequests").get("nodes");
         JsonNode issuesNode = repoNode.get("issues").get("nodes");
 
@@ -380,6 +407,7 @@ public class TeamHealthService {
 
         for (JsonNode pr : prsNode) {
             if (!"MERGED".equals(pr.get("state").asText())) continue;
+            if (!pr.has("mergedAt") || pr.get("mergedAt").isNull()) continue;
 
             String mergedAt = pr.get("mergedAt").asText();
             String createdAt = pr.get("createdAt").asText();
@@ -424,6 +452,7 @@ public class TeamHealthService {
 
             if (title.contains("bug") || title.contains("fix") || title.contains("error")
                     || body.contains("bug") || body.contains("error")) {
+                if (!issue.has("closedAt") || issue.get("closedAt").isNull()) continue;
                 try {
                     ZonedDateTime created = ZonedDateTime.parse(issue.get("createdAt").asText());
                     ZonedDateTime closed = ZonedDateTime.parse(issue.get("closedAt").asText());
@@ -512,7 +541,14 @@ public class TeamHealthService {
 
         ZonedDateTime cutoff = ZonedDateTime.now().minusDays(days);
 
-        JsonNode commitsNode = repoNode.get("defaultBranchRef").get("target").get("history").get("nodes");
+        if (!repoNode.has("defaultBranchRef") || repoNode.get("defaultBranchRef").isNull()) {
+            return String.format("## %s/%s 최근 %d일 활동 요약\n\n기본 브랜치가 없습니다. 빈 레포지토리이거나 기본 브랜치가 설정되지 않았습니다.", owner, repo, days);
+        }
+        JsonNode activityTarget = repoNode.get("defaultBranchRef").get("target");
+        if (activityTarget == null || activityTarget.isNull() || !activityTarget.has("history")) {
+            return String.format("## %s/%s 최근 %d일 활동 요약\n\n커밋 히스토리를 가져올 수 없습니다.", owner, repo, days);
+        }
+        JsonNode commitsNode = activityTarget.get("history").get("nodes");
         JsonNode prsNode = repoNode.get("pullRequests").get("nodes");
         JsonNode issuesNode = repoNode.get("issues").get("nodes");
 
@@ -640,7 +676,14 @@ public class TeamHealthService {
         ZonedDateTime now = ZonedDateTime.now();
         ZonedDateTime cutoff = now.minusDays(days);
 
-        JsonNode commitsNode = repoNode.get("defaultBranchRef").get("target").get("history").get("nodes");
+        if (!repoNode.has("defaultBranchRef") || repoNode.get("defaultBranchRef").isNull()) {
+            return String.format("## %s/%s 스프린트 리포트\n\n기본 브랜치가 없습니다. 빈 레포지토리이거나 기본 브랜치가 설정되지 않았습니다.", owner, repo);
+        }
+        JsonNode sprintTarget = repoNode.get("defaultBranchRef").get("target");
+        if (sprintTarget == null || sprintTarget.isNull() || !sprintTarget.has("history")) {
+            return String.format("## %s/%s 스프린트 리포트\n\n커밋 히스토리를 가져올 수 없습니다.", owner, repo);
+        }
+        JsonNode commitsNode = sprintTarget.get("history").get("nodes");
         JsonNode prsNode = repoNode.get("pullRequests").get("nodes");
         JsonNode issuesNode = repoNode.get("issues").get("nodes");
 
